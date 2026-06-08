@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { memo } from 'react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 
@@ -12,12 +12,15 @@ DOMPurify.addHook('afterSanitizeAttributes', (node) => {
   }
 });
 
-/** Renders assistant content as sanitized Markdown (GFM, code blocks, links). */
-export function Markdown({ text }: { text: string }) {
-  const html = useMemo(() => {
-    const raw = marked.parse(text, { async: false }) as string;
-    return DOMPurify.sanitize(raw);
-  }, [text]);
-
-  return <div className="markdown" dangerouslySetInnerHTML={{ __html: html }} />;
+function render(text: string): string {
+  const raw = marked.parse(text, { async: false }) as string;
+  return DOMPurify.sanitize(raw);
 }
+
+/**
+ * Renders assistant content as sanitized Markdown. Wrapped in React.memo (an
+ * HOC, not a hook) so it only re-parses when the text actually changes.
+ */
+export const Markdown = memo(function Markdown({ text }: { text: string }) {
+  return <div className="markdown" dangerouslySetInnerHTML={{ __html: render(text) }} />;
+});

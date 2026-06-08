@@ -1,95 +1,66 @@
-import { useState } from 'react';
-import { App, Button, Form, Input, Select, Space, Typography } from 'antd';
-import { setSettings } from '../../lib/storage';
-import type { ChatMode, ModelInfo, Settings } from '../../lib/types';
-import { originPattern } from '../../lib/url';
-import { sendRuntime } from '../hooks/usePort';
+import { observer } from 'mobx-react-lite';
+import { Button, Input, Select, Space, Typography } from 'antd';
+import { settingsForm } from '../../stores';
+import type { ChatMode } from '../../lib/types';
 
-export function SettingsView({ settings }: { settings: Settings }) {
-  const { message } = App.useApp();
-  const [form] = Form.useForm<Settings>();
-  const [busy, setBusy] = useState(false);
-
-  async function persist(values: Settings): Promise<boolean> {
-    const origin = originPattern(values.baseUrl);
-    if (!origin) {
-      message.error('Enter a valid http(s) URL.');
-      return false;
-    }
-    const granted = await chrome.permissions.request({ origins: [origin] }).catch(() => false);
-    if (!granted) {
-      message.warning(`Host permission for ${origin} was not granted; requests will fail.`);
-      return false;
-    }
-    await setSettings(values);
-    return true;
-  }
-
-  async function handleSave() {
-    const values = await form.validateFields();
-    setBusy(true);
-    try {
-      if (await persist(values)) message.success('Saved.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleTest() {
-    const values = await form.validateFields();
-    setBusy(true);
-    try {
-      if (!(await persist(values))) return;
-      const data = await sendRuntime<{ models: ModelInfo[] }>({
-        type: 'api',
-        action: 'testConnection',
-      });
-      const names = data.models?.map((m) => m.id).join(', ') || 'none';
-      message.success(`Connected. Models: ${names}`);
-    } catch (err) {
-      message.error(String(err));
-    } finally {
-      setBusy(false);
-    }
-  }
+export const SettingsView = observer(function SettingsView() {
+  const f = settingsForm;
 
   return (
     <div className="scroll-pane">
-      <Form<Settings> form={form} layout="vertical" initialValues={settings} disabled={busy}>
-        <Form.Item
-          label="Hermes base URL"
-          name="baseUrl"
-          rules={[{ required: true, message: 'Required' }]}
-        >
-          <Input placeholder="http://127.0.0.1:8642" />
-        </Form.Item>
+      <div className="settings-form">
+        <label className="field">
+          <span>Hermes base URL</span>
+          <Input
+            value={f.baseUrl}
+            placeholder="http://127.0.0.1:8642"
+            disabled={f.busy}
+            onChange={(e) => f.setBaseUrl(e.target.value)}
+          />
+        </label>
 
-        <Form.Item label="API key (bearer token)" name="apiKey">
-          <Input.Password placeholder="API_SERVER_KEY" />
-        </Form.Item>
+        <label className="field">
+          <span>API key (bearer token)</span>
+          <Input.Password
+            value={f.apiKey}
+            placeholder="API_SERVER_KEY"
+            disabled={f.busy}
+            onChange={(e) => f.setApiKey(e.target.value)}
+          />
+        </label>
 
-        <Form.Item label="Default model / agent" name="defaultModel">
-          <Input placeholder="hermes" />
-        </Form.Item>
+        <label className="field">
+          <span>Default model / agent</span>
+          <Input
+            value={f.defaultModel}
+            placeholder="hermes"
+            disabled={f.busy}
+            onChange={(e) => f.setDefaultModel(e.target.value)}
+          />
+        </label>
 
-        <Form.Item label="Default mode" name="mode">
+        <label className="field">
+          <span>Default mode</span>
           <Select<ChatMode>
+            value={f.mode}
+            disabled={f.busy}
+            onChange={f.setMode}
             options={[
               { value: 'chat', label: 'Chat completions' },
               { value: 'run', label: 'Runs (long tasks)' },
             ]}
           />
-        </Form.Item>
+        </label>
 
         <Space>
-          <Button type="primary" loading={busy} onClick={handleSave}>
+          <Button type="primary" loading={f.busy} onClick={f.save}>
             Save
           </Button>
-          <Button onClick={handleTest} loading={busy}>
+          <Button loading={f.busy} onClick={f.test}>
             Test connection
           </Button>
         </Space>
-      </Form>
+      </div>
 
       <Typography.Paragraph type="secondary" style={{ marginTop: 16, fontSize: 12 }}>
         All requests run from the extension background worker. Granting the host permission lets it
@@ -97,4 +68,4 @@ export function SettingsView({ settings }: { settings: Settings }) {
       </Typography.Paragraph>
     </div>
   );
-}
+});
