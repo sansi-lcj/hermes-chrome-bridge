@@ -1,5 +1,6 @@
+import { lazy, Suspense } from 'react';
 import { observer } from 'mobx-react-lite';
-import { Segmented } from 'antd';
+import { Segmented, Spin } from 'antd';
 import {
   MessageOutlined,
   ThunderboltOutlined,
@@ -9,9 +10,23 @@ import {
 import { settingsStore, uiStore } from '../stores';
 import type { Tab } from '../stores/UiStore';
 import { ChatView } from './components/ChatView';
-import { SkillsView } from './components/SkillsView';
-import { SessionsView } from './components/SessionsView';
-import { SettingsView } from './components/SettingsView';
+
+// Code-split the secondary views so they load only when opened.
+const SkillsView = lazy(() =>
+  import('./components/SkillsView').then((m) => ({ default: m.SkillsView })),
+);
+const SessionsView = lazy(() =>
+  import('./components/SessionsView').then((m) => ({ default: m.SessionsView })),
+);
+const SettingsView = lazy(() =>
+  import('./components/SettingsView').then((m) => ({ default: m.SettingsView })),
+);
+
+const Loading = (
+  <div className="centered">
+    <Spin />
+  </div>
+);
 
 export const App = observer(function App() {
   if (!settingsStore.loaded) return <div className="loading">Loading…</div>;
@@ -37,9 +52,11 @@ export const App = observer(function App() {
         <div hidden={tab !== 'chat'} className="view-pane">
           <ChatView />
         </div>
-        {tab === 'skills' && <SkillsView />}
-        {tab === 'sessions' && <SessionsView />}
-        {tab === 'settings' && <SettingsView />}
+        <Suspense fallback={Loading}>
+          {tab === 'skills' && <SkillsView />}
+          {tab === 'sessions' && <SessionsView />}
+          {tab === 'settings' && <SettingsView />}
+        </Suspense>
       </main>
     </div>
   );

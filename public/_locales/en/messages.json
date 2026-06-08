@@ -1,0 +1,8 @@
+{
+  "extName": {
+    "message": "Hermes Chrome Bridge"
+  },
+  "extDescription": {
+    "message": "Connect Chrome to a deployed Hermes Agent and use its capabilities while you browse."
+  }
+}

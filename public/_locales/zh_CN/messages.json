@@ -1,0 +1,8 @@
+{
+  "extName": {
+    "message": "Hermes Chrome 桥"
+  },
+  "extDescription": {
+    "message": "将 Chrome 连接到已部署的 Hermes Agent，在浏览时使用其能力。"
+  }
+}

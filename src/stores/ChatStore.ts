@@ -14,6 +14,7 @@ import {
   saveConversation,
   type StoredMessage,
 } from '../lib/conversation';
+import { onDeviceAvailable, onDevicePromptStream } from '../lib/builtinAI';
 import { sendRuntime } from '../lib/messaging';
 import { takePendingPrompt } from '../lib/pending';
 import type {
@@ -42,10 +43,16 @@ export class ChatStore {
   models: ModelInfo[] = [];
   attachContext = false;
   streaming = false;
+  /** Whether to answer with Chrome's on-device model instead of Hermes. */
+  onDevice = false;
+  /** Whether the on-device model is available on this machine. */
+  onDeviceSupported = false;
 
   // Non-observable internals (a Chrome Port must not be proxied by MobX).
   private port: chrome.runtime.Port | null = null;
   private activeReq: string | null = null;
+  /** Bumped to cancel an in-flight on-device stream. */
+  private odToken = 0;
 
   constructor(private settings: SettingsStore) {
     makeObservable(
@@ -58,12 +65,17 @@ export class ChatStore {
         models: observable,
         attachContext: observable,
         streaming: observable,
+        onDevice: observable,
+        onDeviceSupported: observable,
         modelOptions: computed,
         canSend: computed,
         setInput: action,
         setMode: action,
         setModel: action,
         setAttachContext: action,
+        setOnDevice: action,
+        detectOnDevice: action,
+        runOnDevice: action,
         syncDefaults: action,
         loadModels: action,
         restore: action,
@@ -95,6 +107,7 @@ export class ChatStore {
     );
 
     void this.restore();
+    void this.detectOnDevice();
     this.connect();
 
     void this.consumePending();
@@ -131,6 +144,16 @@ export class ChatStore {
   }
   setAttachContext(v: boolean) {
     this.attachContext = v;
+  }
+  setOnDevice(v: boolean) {
+    this.onDevice = v;
+  }
+
+  async detectOnDevice() {
+    const ok = await onDeviceAvailable();
+    runInAction(() => {
+      this.onDeviceSupported = ok;
+    });
   }
 
   syncDefaults() {
@@ -211,6 +234,12 @@ export class ChatStore {
     this.messages.push({ role: 'assistant', content: '', tools: [] });
     this.input = '';
     this.streaming = true;
+
+    if (this.onDevice && this.onDeviceSupported) {
+      void this.runOnDevice(++this.odToken);
+      return;
+    }
+
     const requestId = nextId();
     this.activeReq = requestId;
     this.send({
@@ -224,7 +253,34 @@ export class ChatStore {
     });
   }
 
+  /** Stream an answer from Chrome's on-device model into the last bubble. */
+  async runOnDevice(token: number) {
+    const transcript = this.messages
+      .filter((m) => m.content.length > 0)
+      .map((m) => `${m.role}: ${m.content}`)
+      .join('\n');
+    try {
+      for await (const chunk of onDevicePromptStream(transcript)) {
+        if (token !== this.odToken) break; // cancelled
+        runInAction(() => {
+          const last = this.messages[this.messages.length - 1];
+          if (last && last.role === 'assistant') last.content += chunk;
+        });
+      }
+    } catch (e) {
+      runInAction(() => {
+        const last = this.messages[this.messages.length - 1];
+        if (last && last.role === 'assistant') last.content += `\n\n> ⚠️ ${String(e)}`;
+      });
+    } finally {
+      runInAction(() => {
+        if (token === this.odToken) this.streaming = false;
+      });
+    }
+  }
+
   stop() {
+    this.odToken++; // cancel any on-device stream
     if (this.activeReq) this.send({ type: 'cancel', requestId: this.activeReq });
     this.streaming = false;
   }

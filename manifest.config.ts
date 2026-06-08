@@ -3,9 +3,10 @@ import pkg from './package.json';
 
 export default defineManifest({
   manifest_version: 3,
-  name: 'Hermes Chrome Bridge',
-  description:
-    'Connect Chrome to a deployed Hermes Agent and use its capabilities while you browse.',
+  // Localized via _locales/<lang>/messages.json (see public/_locales).
+  default_locale: 'en',
+  name: '__MSG_extName__',
+  description: '__MSG_extDescription__',
   version: pkg.version,
   icons: {
     16: 'icons/icon-16.png',
