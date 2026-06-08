@@ -1,24 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type {
-  BackgroundToUi,
-  ChatMessage,
-  ChatMode,
-  ModelInfo,
-  PageContext,
-  Settings,
-} from '../../lib/types';
+import type { BackgroundToUi, ChatMode, ModelInfo, PageContext, Settings } from '../../lib/types';
+import {
+  clearConversation,
+  loadConversation,
+  saveConversation,
+  type StoredMessage,
+} from '../../lib/conversation';
 import { sendRuntime, usePort } from '../hooks/usePort';
-
-interface DisplayMessage extends ChatMessage {
-  /** Tool-progress lines accumulated while this assistant turn streamed. */
-  tools?: string[];
-}
+import { Markdown } from './Markdown';
 
 let counter = 0;
 const nextId = () => `req-${Date.now()}-${counter++}`;
 
 export function ChatView({ settings }: { settings: Settings }) {
-  const [messages, setMessages] = useState<DisplayMessage[]>([]);
+  const [messages, setMessages] = useState<StoredMessage[]>([]);
   const [input, setInput] = useState('');
   const [mode, setMode] = useState<ChatMode>(settings.mode);
   const [model, setModel] = useState(settings.defaultModel);
@@ -51,6 +46,11 @@ export function ChatView({ settings }: { settings: Settings }) {
     }
   });
 
+  // Restore persisted conversation once on mount.
+  useEffect(() => {
+    loadConversation().then(setMessages);
+  }, []);
+
   useEffect(() => {
     setModel(settings.defaultModel);
     setMode(settings.mode);
@@ -65,6 +65,11 @@ export function ChatView({ settings }: { settings: Settings }) {
   useEffect(() => {
     scrollRef.current?.scrollTo(0, scrollRef.current.scrollHeight);
   }, [messages]);
+
+  // Persist whenever a turn completes (avoid churning storage mid-stream).
+  useEffect(() => {
+    if (!streaming && messages.length > 0) void saveConversation(messages);
+  }, [streaming, messages]);
 
   const canSend = input.trim().length > 0 && !streaming;
 
@@ -82,7 +87,7 @@ export function ChatView({ settings }: { settings: Settings }) {
       }
     }
 
-    const history: DisplayMessage[] = [
+    const history: StoredMessage[] = [
       ...messages,
       { role: 'user', content: userContent },
       { role: 'assistant', content: '', tools: [] },
@@ -107,6 +112,13 @@ export function ChatView({ settings }: { settings: Settings }) {
   function handleStop() {
     if (activeReq.current) send({ type: 'cancel', requestId: activeReq.current });
     setStreaming(false);
+  }
+
+  function handleNewChat() {
+    if (streaming) handleStop();
+    setMessages([]);
+    setError(null);
+    void clearConversation();
   }
 
   const modelOptions = useMemo(() => {
@@ -141,11 +153,16 @@ export function ChatView({ settings }: { settings: Settings }) {
           />
           Page context
         </label>
+        <button className="link new-chat" onClick={handleNewChat} title="Start a new conversation">
+          New chat
+        </button>
       </div>
 
       <div className="messages" ref={scrollRef}>
         {messages.length === 0 && (
-          <p className="empty">Ask the Hermes Agent anything. Toggle “Page context” to include the current tab.</p>
+          <p className="empty">
+            Ask the Hermes Agent anything. Toggle “Page context” to include the current tab.
+          </p>
         )}
         {messages.map((m, i) => (
           <div key={i} className={`msg ${m.role}`}>
@@ -159,7 +176,26 @@ export function ChatView({ settings }: { settings: Settings }) {
                 ))}
               </details>
             )}
-            <div className="bubble">{m.content || (streaming && i === messages.length - 1 ? '…' : '')}</div>
+            <div className="bubble">
+              {m.role === 'assistant' ? (
+                m.content ? (
+                  <Markdown text={m.content} />
+                ) : (
+                  streaming && i === messages.length - 1 && <span className="cursor">…</span>
+                )
+              ) : (
+                m.content
+              )}
+            </div>
+            {m.role === 'assistant' && m.content && (
+              <button
+                className="copy"
+                title="Copy"
+                onClick={() => navigator.clipboard?.writeText(m.content)}
+              >
+                Copy
+              </button>
+            )}
           </div>
         ))}
       </div>

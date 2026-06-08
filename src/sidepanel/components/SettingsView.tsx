@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { setSettings } from '../../lib/storage';
 import type { ChatMode, ModelInfo, Settings } from '../../lib/types';
+import { originPattern } from '../../lib/url';
 import { sendRuntime } from '../hooks/usePort';
 
 type Status =
@@ -79,11 +80,7 @@ export function SettingsView({ settings }: { settings: Settings }) {
 
       <label className="field">
         <span>Default model / agent</span>
-        <input
-          type="text"
-          value={defaultModel}
-          onChange={(e) => setDefaultModel(e.target.value)}
-        />
+        <input type="text" value={defaultModel} onChange={(e) => setDefaultModel(e.target.value)} />
       </label>
 
       <label className="field">
@@ -95,10 +92,18 @@ export function SettingsView({ settings }: { settings: Settings }) {
       </label>
 
       <div className="actions">
-        <button className="send" onClick={() => void handleSave()} disabled={status.kind === 'saving'}>
+        <button
+          className="send"
+          onClick={() => void handleSave()}
+          disabled={status.kind === 'saving'}
+        >
           Save
         </button>
-        <button className="link" onClick={() => void handleTest()} disabled={status.kind === 'saving'}>
+        <button
+          className="link"
+          onClick={() => void handleTest()}
+          disabled={status.kind === 'saving'}
+        >
           Test connection
         </button>
       </div>
@@ -113,15 +118,4 @@ export function SettingsView({ settings }: { settings: Settings }) {
       </p>
     </div>
   );
-}
-
-/** Build a `<scheme>://<host>/*` match pattern from a base URL, or null. */
-function originPattern(url: string): string | null {
-  try {
-    const u = new URL(url);
-    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
-    return `${u.protocol}//${u.host}/*`;
-  } catch {
-    return null;
-  }
 }

@@ -7,8 +7,20 @@ export default defineManifest({
   description:
     'Connect Chrome to a deployed Hermes Agent and use its capabilities while you browse.',
   version: pkg.version,
+  icons: {
+    16: 'icons/icon-16.png',
+    32: 'icons/icon-32.png',
+    48: 'icons/icon-48.png',
+    128: 'icons/icon-128.png',
+  },
   action: {
     default_title: 'Open Hermes Agent',
+    default_icon: {
+      16: 'icons/icon-16.png',
+      32: 'icons/icon-32.png',
+      48: 'icons/icon-48.png',
+      128: 'icons/icon-128.png',
+    },
   },
   background: {
     service_worker: 'src/background/index.ts',

@@ -6,7 +6,8 @@ Hermes Agent exposes an OpenAI-compatible HTTP API server. This extension talks 
 
 ## Features
 
-- **Side-panel chat** with live token streaming (SSE) and a collapsible tool-progress trail.
+- **Side-panel chat** with live token streaming (SSE), **Markdown rendering** (code blocks, lists, links), and a collapsible tool-progress trail.
+- **Conversation persistence** — your chat survives closing the panel; start fresh with **New chat**.
 - **Page context** — attach the current tab's selection or readable text to your message.
 - **Runs mode** — drive long, autonomous tasks via the `/v1/runs` API with live events and cancel.
 - **Skills & Sessions** — browse `/v1/skills`, `/v1/toolsets`, and `/api/sessions`.
@@ -19,32 +20,50 @@ All Hermes network calls run in the **background service worker**, which holds t
 - A reachable Hermes Agent API server (`API_SERVER_ENABLED=true`, an `API_SERVER_KEY`, default port `8642`). Any OpenAI-compatible server works for smoke-testing the chat path.
 - Node.js 18+ and Chrome 114+ (side panel support).
 
-## Develop
+## Install (from source)
 
 ```bash
 npm install
-npm run dev      # Vite + CRXJS with HMR
+npm run build
 ```
 
-Then load the extension:
+Then load it:
 
 1. Open `chrome://extensions`, enable **Developer mode**.
-2. Click **Load unpacked** and select the generated `dist/` folder (for `dev`, CRXJS writes `dist/` and reloads on change).
-
-## Build
-
-```bash
-npm run typecheck   # tsc --noEmit
-npm run build       # type-check + production build to dist/
-```
-
-Load `dist/` as an unpacked extension as above.
+2. Click **Load unpacked** and select the generated `dist/` folder.
 
 ## Usage
 
 1. Click the toolbar icon to open the side panel.
 2. In **Settings**, enter your Hermes base URL and API key, grant the host-permission prompt, and click **Test connection**.
 3. Chat from the **Chat** tab. Toggle **Run mode** for long tasks and **Page context** to include the current page.
+
+## Development
+
+```bash
+npm run dev         # Vite + CRXJS with HMR (writes dist/, reloads on change)
+npm run typecheck   # tsc --noEmit
+npm run test        # Vitest unit tests
+npm run lint        # ESLint + Prettier check
+npm run format      # Prettier --write
+npm run icons       # regenerate PNG icons from scripts/generate-icons.mjs
+npm run package     # build + zip a Web Store archive into release/
+```
+
+CI (`.github/workflows/ci.yml`) runs type-check, lint, tests, build, and an icon-freshness check on every push and PR.
+
+## Architecture
+
+```
+sidepanel (React) ⇄ Port ⇄ background SW ⇄ fetch/SSE ⇄ Hermes API
+                                 └⇄ tabs.sendMessage ⇄ content script (page context)
+```
+
+- `src/lib/hermesClient.ts` — typed API client + incremental SSE decoder
+- `src/lib/storage.ts`, `src/lib/conversation.ts` — settings & chat persistence
+- `src/background/index.ts` — owns all Hermes access, streams over a Port
+- `src/content/index.ts` — supplies page context on demand
+- `src/sidepanel/**` — React UI (Chat / Skills / Sessions / Settings)
 
 ## License
 
