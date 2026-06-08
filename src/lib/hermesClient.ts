@@ -53,6 +53,12 @@ export class HermesClient {
   }
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
+    const res = await withRetry(() => this.fetchOk(path, init), { retryable: isTransient });
+    return (await res.json()) as T;
+  }
+
+  /** Fetch + status check, throwing a typed HermesError. Used under withRetry. */
+  private async fetchOk(path: string, init?: RequestInit): Promise<Response> {
     let res: Response;
     try {
       res = await fetch(`${this.baseUrl}${path}`, {
@@ -68,7 +74,7 @@ export class HermesClient {
     if (!res.ok) {
       throw new HermesError(await this.describeError(res), res.status);
     }
-    return (await res.json()) as T;
+    return res;
   }
 
   private async describeError(res: Response): Promise<string> {
@@ -267,6 +273,46 @@ function safeJson<T>(raw: string): T | undefined {
   } catch {
     return undefined;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Retry with exponential backoff (for idempotent, non-streaming requests)
+// ---------------------------------------------------------------------------
+
+const RETRYABLE_STATUS = new Set([429, 502, 503, 504]);
+
+/** A transient failure worth retrying: a network error or a 429/5xx. */
+export function isTransient(err: unknown): boolean {
+  if (!(err instanceof HermesError)) return false;
+  return err.status === undefined || RETRYABLE_STATUS.has(err.status);
+}
+
+export interface RetryOptions {
+  attempts?: number;
+  baseMs?: number;
+  retryable?: (err: unknown) => boolean;
+  /** Injectable sleep (tests pass a no-op). */
+  sleep?: (ms: number) => Promise<void>;
+}
+
+/** Run `fn`, retrying transient failures with exponential backoff. */
+export async function withRetry<T>(fn: () => Promise<T>, opts: RetryOptions = {}): Promise<T> {
+  const attempts = opts.attempts ?? 3;
+  const baseMs = opts.baseMs ?? 300;
+  const retryable = opts.retryable ?? (() => true);
+  const sleep = opts.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
+
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (i === attempts - 1 || !retryable(err)) throw err;
+      await sleep(baseMs * 2 ** i);
+    }
+  }
+  throw lastErr;
 }
 
 /** Normalize `[...]`, `{ data: [...] }`, or `{ items: [...] }` into an array. */

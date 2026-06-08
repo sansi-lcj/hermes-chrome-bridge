@@ -10,6 +10,7 @@
 
 import { HermesClient, HermesError } from '../lib/hermesClient';
 import { setPendingPrompt } from '../lib/pending';
+import { addRun, listRuns, removeRun } from '../lib/runRegistry';
 import { getSettings } from '../lib/storage';
 import type {
   ApiRequest,
@@ -123,30 +124,35 @@ async function runStream(
   try {
     if (useRun) {
       const run = await hermes.createRun(messages, model);
-      channel.post({
-        type: 'chat.tool',
-        requestId,
-        progress: { message: `Run started: ${run.id}` },
-      });
-      controller.signal.addEventListener('abort', () => void hermes.stopRun(run.id));
+      await addRun(run.id, model); // survive a service-worker restart
+      try {
+        channel.post({
+          type: 'chat.tool',
+          requestId,
+          progress: { message: `Run started: ${run.id}` },
+        });
+        controller.signal.addEventListener('abort', () => void hermes.stopRun(run.id));
 
-      let answer = '';
-      for await (const ev of hermes.runEvents(run.id, controller.signal)) {
-        const text = extractRunText(ev.data);
-        if (text) {
-          answer += text;
-          channel.post({ type: 'chat.delta', requestId, content: text });
-        } else {
-          channel.post({
-            type: 'chat.tool',
-            requestId,
-            progress: { message: ev.event ?? 'event' },
-          });
+        let answer = '';
+        for await (const ev of hermes.runEvents(run.id, controller.signal)) {
+          const text = extractRunText(ev.data);
+          if (text) {
+            answer += text;
+            channel.post({ type: 'chat.delta', requestId, content: text });
+          } else {
+            channel.post({
+              type: 'chat.tool',
+              requestId,
+              progress: { message: ev.event ?? 'event' },
+            });
+          }
         }
+        channel.post({ type: 'chat.done', requestId });
+        // If the panel closed mid-run, ping the user that it finished.
+        if (!channel.alive) notifyRunDone(answer);
+      } finally {
+        await removeRun(run.id);
       }
-      channel.post({ type: 'chat.done', requestId });
-      // If the panel closed mid-run, ping the user that it finished.
-      if (!channel.alive) notifyRunDone(answer);
       return;
     }
 
@@ -261,6 +267,38 @@ function notifyRunDone(answer: string): void {
 }
 
 chrome.notifications.onClicked.addListener(() => void openPanel());
+
+// ---------------------------------------------------------------------------
+// Resume Runs orphaned by a service-worker restart
+// ---------------------------------------------------------------------------
+
+/** On startup, reconnect to any Run left in the registry and notify on finish. */
+async function resumeOrphanedRuns(): Promise<void> {
+  const runs = await listRuns();
+  const ids = Object.keys(runs);
+  if (ids.length === 0) return;
+  const hermes = await client();
+  for (const runId of ids) void resumeRun(hermes, runId);
+}
+
+async function resumeRun(hermes: HermesClient, runId: string): Promise<void> {
+  const controller = new AbortController();
+  let answer = '';
+  try {
+    for await (const ev of hermes.runEvents(runId, controller.signal)) {
+      const text = extractRunText(ev.data);
+      if (text) answer += text;
+    }
+    notifyRunDone(answer);
+  } catch {
+    /* run gone or unreachable — drop it */
+  } finally {
+    await removeRun(runId);
+  }
+}
+
+// Runs once per worker startup (a fresh instance has no in-memory streams).
+void resumeOrphanedRuns();
 
 // ---------------------------------------------------------------------------
 // One-off discovery + page-context requests

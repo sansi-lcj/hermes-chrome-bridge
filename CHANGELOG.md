@@ -1,5 +1,40 @@
 # Changelog
 
+## 1.3.0
+
+Best-practices pass across the audit items.
+
+### Added
+
+- **Service-worker run resilience**: in-flight Runs are tracked in a persisted
+  registry (`src/lib/runRegistry.ts`); on worker restart the background
+  reconnects to each Run's event stream and notifies on completion.
+- **Network retry/backoff** for non-streaming requests (`withRetry` + transient
+  classification) so flaky discovery calls recover automatically.
+- **Hybrid on-device AI**: when Chrome's built-in Prompt API (Gemini Nano) is
+  available, an **On-device** toggle answers locally with no network calls;
+  feature-detected with graceful fallback to Hermes.
+- **i18n**: localized manifest name/description via `_locales` (`en`, `zh_CN`)
+  and `default_locale`.
+- **Dependabot** (npm + actions) and a **Release** workflow that packages the
+  extension and attaches the zip to a `v*` tag.
+- `SECURITY.md` threat model; README privacy / resilience / browser-support
+  sections.
+- Conversation history is capped (`MAX_STORED_MESSAGES`).
+
+### Changed
+
+- Migrated linting to **ESLint 9 flat config** (`eslint.config.js`) with
+  `typescript-eslint` and the flat `react-hooks` preset.
+- Code-split the Skills/Sessions/Settings views (`React.lazy` + `Suspense`).
+- a11y: aria-labels on icon-only toggles.
+
+### Notes
+
+- Kept CRXJS rather than migrating to WXT (a framework swap mid-project is
+  high-risk); cross-browser via a `browser.*` polyfill is documented as a
+  follow-up. End-to-end (Playwright) tests land in a dedicated follow-up PR.
+
 ## 1.2.0
 
 State management moved to **MobX**, eliminating React hooks from the app code.

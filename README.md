@@ -45,7 +45,26 @@ Then load it:
 
 1. Click the toolbar icon to open the side panel.
 2. In **Settings**, enter your Hermes base URL and API key, grant the host-permission prompt, and click **Test connection**.
-3. Chat from the **Chat** tab. Toggle **Run mode** for long tasks and **Page context** to include the current page.
+3. Chat from the **Chat** tab. Toggle **Run mode** for long tasks and **Page context** to include the current page. If your machine supports Chrome's built-in AI, an **On-device** toggle appears that answers locally (no network).
+
+## Resilience
+
+Runs started via the Runs API are tracked in a persisted registry, so if the
+MV3 service worker is recycled mid-task the worker reconnects to the Run's event
+stream on restart and notifies you on completion. Transient network failures on
+discovery requests are retried with exponential backoff.
+
+## Privacy & security
+
+All Hermes calls run from the background worker; the API key never leaves it.
+Page content is sent only when you enable **Page context** (selection preferred),
+and **On-device** mode keeps everything local. See [SECURITY.md](./SECURITY.md)
+for the full threat model and known limitations.
+
+## Browser support
+
+Built and tested for **Chrome/Edge** (Chromium, MV3, side panel). Firefox would
+additionally need a `browser.*` polyfill — not yet wired up.
 
 ## Development
 

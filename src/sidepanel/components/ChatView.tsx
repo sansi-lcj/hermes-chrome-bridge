@@ -1,6 +1,6 @@
 import { observer } from 'mobx-react-lite';
 import { Button, Select, Switch, Tooltip } from 'antd';
-import { EditOutlined, FileTextOutlined } from '@ant-design/icons';
+import { EditOutlined, FileTextOutlined, RobotOutlined } from '@ant-design/icons';
 import { Bubble, Prompts, Sender, ThoughtChain, Welcome } from '@ant-design/x';
 import type { BubbleItemType, BubbleListProps } from '@ant-design/x';
 import { chatStore } from '../../stores';
@@ -68,12 +68,25 @@ export const ChatView = observer(function ChatView() {
         <Tooltip title="Attach the current page's selection/content">
           <Switch
             size="small"
+            aria-label="Attach page context"
             checked={s.attachContext}
             onChange={s.setAttachContext}
             checkedChildren={<FileTextOutlined />}
             unCheckedChildren={<FileTextOutlined />}
           />
         </Tooltip>
+        {s.onDeviceSupported && (
+          <Tooltip title="Answer on-device with Chrome's built-in AI (private, no network)">
+            <Switch
+              size="small"
+              aria-label="Use on-device AI"
+              checked={s.onDevice}
+              onChange={s.setOnDevice}
+              checkedChildren="On-device"
+              unCheckedChildren={<RobotOutlined />}
+            />
+          </Tooltip>
+        )}
         <Button size="small" icon={<EditOutlined />} onClick={s.newChat} className="new-chat">
           New chat
         </Button>
