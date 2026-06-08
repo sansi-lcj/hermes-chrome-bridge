@@ -112,9 +112,7 @@ export class HermesClient {
 
   /** Helper that tolerates both `[...]` and `{ data: [...] }` envelope shapes. */
   private async listOf<T>(path: string): Promise<T[]> {
-    const raw = await this.request<T[] | { data?: T[]; items?: T[] }>(path);
-    if (Array.isArray(raw)) return raw;
-    return raw.data ?? raw.items ?? [];
+    return unwrapList<T>(await this.request(path));
   }
 
   // ----- Chat completions (streaming) --------------------------------------
@@ -188,55 +186,76 @@ export class HermesClient {
 // SSE parsing
 // ---------------------------------------------------------------------------
 
-interface SseFrame {
+export interface SseFrame {
   event?: string;
   data: string;
 }
 
 /**
- * Parse a Server-Sent Events stream into frames. Handles multi-line `data:`
- * fields and `event:` names; flushes one frame per blank-line separator.
+ * Incremental Server-Sent Events decoder. Feed it raw text via `push()` (chunk
+ * boundaries may fall anywhere) and it returns whichever complete frames are
+ * now available; call `flush()` at end-of-stream to emit a trailing frame that
+ * had no terminating blank line. Pure and synchronous, so it is unit-testable
+ * without a ReadableStream.
  */
+export function createSseDecoder() {
+  let buffer = '';
+  let event: string | undefined;
+  let dataLines: string[] = [];
+
+  const consumeLine = (line: string, out: SseFrame[]) => {
+    if (line === '') {
+      if (dataLines.length > 0) out.push({ event, data: dataLines.join('\n') });
+      event = undefined;
+      dataLines = [];
+      return;
+    }
+    if (line.startsWith(':')) return; // comment / heartbeat
+    if (line.startsWith('event:')) event = line.slice(6).trim();
+    else if (line.startsWith('data:')) dataLines.push(line.slice(5).replace(/^ /, ''));
+  };
+
+  return {
+    push(text: string): SseFrame[] {
+      buffer += text;
+      const out: SseFrame[] = [];
+      let nl: number;
+      while ((nl = buffer.indexOf('\n')) !== -1) {
+        consumeLine(buffer.slice(0, nl).replace(/\r$/, ''), out);
+        buffer = buffer.slice(nl + 1);
+      }
+      return out;
+    },
+    flush(): SseFrame[] {
+      const out: SseFrame[] = [];
+      if (buffer.length > 0) {
+        consumeLine(buffer.replace(/\r$/, ''), out);
+        buffer = '';
+      }
+      if (dataLines.length > 0) {
+        out.push({ event, data: dataLines.join('\n') });
+        dataLines = [];
+      }
+      return out;
+    },
+  };
+}
+
+/** Parse an SSE response body into frames using the incremental decoder. */
 async function* parseSse(
   body: ReadableStream<Uint8Array>,
   signal: AbortSignal,
 ): AsyncGenerator<SseFrame> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
-  let buffer = '';
-  let event: string | undefined;
-  let dataLines: string[] = [];
-
+  const sse = createSseDecoder();
   try {
     while (!signal.aborted) {
       const { done, value } = await reader.read();
       if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      let nl: number;
-      while ((nl = buffer.indexOf('\n')) !== -1) {
-        const line = buffer.slice(0, nl).replace(/\r$/, '');
-        buffer = buffer.slice(nl + 1);
-
-        if (line === '') {
-          // Blank line: dispatch the accumulated frame.
-          if (dataLines.length > 0) {
-            yield { event, data: dataLines.join('\n') };
-          }
-          event = undefined;
-          dataLines = [];
-          continue;
-        }
-        if (line.startsWith(':')) continue; // comment / heartbeat
-        if (line.startsWith('event:')) {
-          event = line.slice(6).trim();
-        } else if (line.startsWith('data:')) {
-          dataLines.push(line.slice(5).replace(/^ /, ''));
-        }
-      }
+      for (const frame of sse.push(decoder.decode(value, { stream: true }))) yield frame;
     }
-    // Flush a trailing frame with no terminating blank line.
-    if (dataLines.length > 0) yield { event, data: dataLines.join('\n') };
+    for (const frame of sse.flush()) yield frame;
   } finally {
     reader.cancel().catch(() => undefined);
   }
@@ -248,4 +267,15 @@ function safeJson<T>(raw: string): T | undefined {
   } catch {
     return undefined;
   }
+}
+
+/** Normalize `[...]`, `{ data: [...] }`, or `{ items: [...] }` into an array. */
+export function unwrapList<T>(raw: unknown): T[] {
+  if (Array.isArray(raw)) return raw as T[];
+  if (raw && typeof raw === 'object') {
+    const o = raw as { data?: T[]; items?: T[] };
+    if (Array.isArray(o.data)) return o.data;
+    if (Array.isArray(o.items)) return o.items;
+  }
+  return [];
 }

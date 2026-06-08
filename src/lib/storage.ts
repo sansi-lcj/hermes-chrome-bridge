@@ -20,10 +20,7 @@ export async function setSettings(patch: Partial<Settings>): Promise<Settings> {
 
 /** Subscribe to settings changes. Returns an unsubscribe function. */
 export function onSettingsChanged(cb: (settings: Settings) => void): () => void {
-  const listener = (
-    changes: { [name: string]: chrome.storage.StorageChange },
-    area: string,
-  ) => {
+  const listener = (changes: { [name: string]: chrome.storage.StorageChange }, area: string) => {
     if (area === 'local' && changes[KEY]) {
       cb({ ...DEFAULT_SETTINGS, ...(changes[KEY].newValue as Partial<Settings>) });
     }

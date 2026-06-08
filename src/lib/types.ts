@@ -193,18 +193,11 @@ export type ContentScriptMessage = GetPageContextMessage;
 // Discovery / connection requests (chrome.runtime.sendMessage -> background)
 // ---------------------------------------------------------------------------
 
-export type ApiAction =
-  | 'testConnection'
-  | 'models'
-  | 'skills'
-  | 'toolsets'
-  | 'sessions';
+export type ApiAction = 'testConnection' | 'models' | 'skills' | 'toolsets' | 'sessions';
 
 export interface ApiRequest {
   type: 'api';
   action: ApiAction;
 }
 
-export type ApiResponse<T = unknown> =
-  | { ok: true; data: T }
-  | { ok: false; error: string };
+export type ApiResponse<T = unknown> = { ok: true; data: T } | { ok: false; error: string };
