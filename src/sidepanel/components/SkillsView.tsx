@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Alert, Card, Empty, List, Spin, Tag, Typography } from 'antd';
 import type { Skill, Toolset } from '../../lib/types';
 import { sendRuntime } from '../hooks/usePort';
 
@@ -23,31 +24,49 @@ export function SkillsView() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="loading">Loading skills…</div>;
+  if (loading)
+    return (
+      <div className="centered">
+        <Spin />
+      </div>
+    );
 
   return (
-    <div className="list-view">
-      {error && <div className="error-banner">{error}</div>}
-      <h3>Skills ({skills.length})</h3>
-      {skills.length === 0 && <p className="empty">No skills reported by this agent.</p>}
-      {skills.map((s, i) => (
-        <div key={s.id ?? i} className="card">
-          <div className="card-title">{s.name}</div>
-          {s.description && <div className="card-desc">{s.description}</div>}
-        </div>
-      ))}
+    <div className="scroll-pane">
+      {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 12 }} />}
 
-      <h3>Toolsets ({toolsets.length})</h3>
-      {toolsets.length === 0 && <p className="empty">No toolsets reported.</p>}
-      {toolsets.map((t, i) => (
-        <div key={t.id ?? i} className="card">
-          <div className="card-title">{t.name}</div>
-          {t.description && <div className="card-desc">{t.description}</div>}
-          {t.tools && t.tools.length > 0 && (
-            <div className="card-desc">Tools: {t.tools.join(', ')}</div>
+      <Typography.Title level={5}>Skills ({skills.length})</Typography.Title>
+      {skills.length === 0 ? (
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No skills reported" />
+      ) : (
+        <List
+          size="small"
+          dataSource={skills}
+          renderItem={(s) => (
+            <List.Item>
+              <List.Item.Meta title={s.name} description={s.description} />
+            </List.Item>
           )}
-        </div>
-      ))}
+        />
+      )}
+
+      <Typography.Title level={5} style={{ marginTop: 16 }}>
+        Toolsets ({toolsets.length})
+      </Typography.Title>
+      {toolsets.length === 0 ? (
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No toolsets reported" />
+      ) : (
+        toolsets.map((t, i) => (
+          <Card key={t.id ?? i} size="small" title={t.name} style={{ marginBottom: 8 }}>
+            {t.description && (
+              <Typography.Paragraph type="secondary">{t.description}</Typography.Paragraph>
+            )}
+            {t.tools?.map((tool) => (
+              <Tag key={tool}>{tool}</Tag>
+            ))}
+          </Card>
+        ))
+      )}
     </div>
   );
 }

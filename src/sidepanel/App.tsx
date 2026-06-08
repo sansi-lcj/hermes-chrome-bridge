@@ -1,4 +1,11 @@
 import { useEffect, useState } from 'react';
+import { Segmented } from 'antd';
+import {
+  MessageOutlined,
+  ThunderboltOutlined,
+  HistoryOutlined,
+  SettingOutlined,
+} from '@ant-design/icons';
 import { getSettings, onSettingsChanged } from '../lib/storage';
 import { DEFAULT_SETTINGS, type Settings } from '../lib/types';
 import { ChatView } from './components/ChatView';
@@ -7,13 +14,6 @@ import { SessionsView } from './components/SessionsView';
 import { SettingsView } from './components/SettingsView';
 
 type Tab = 'chat' | 'skills' | 'sessions' | 'settings';
-
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'chat', label: 'Chat' },
-  { id: 'skills', label: 'Skills' },
-  { id: 'sessions', label: 'Sessions' },
-  { id: 'settings', label: 'Settings' },
-];
 
 export function App() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
@@ -24,7 +24,6 @@ export function App() {
     getSettings().then((s) => {
       setSettings(s);
       setLoaded(true);
-      // Nudge first-time users to configure the connection.
       if (!s.baseUrl || !s.apiKey) setTab('settings');
     });
     return onSettingsChanged(setSettings);
@@ -34,19 +33,24 @@ export function App() {
 
   return (
     <div className="app">
-      <nav className="tabs">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            className={t.id === tab ? 'tab active' : 'tab'}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </nav>
+      <header className="topbar">
+        <Segmented<Tab>
+          block
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: 'chat', label: 'Chat', icon: <MessageOutlined /> },
+            { value: 'skills', label: 'Skills', icon: <ThunderboltOutlined /> },
+            { value: 'sessions', label: 'Sessions', icon: <HistoryOutlined /> },
+            { value: 'settings', label: 'Settings', icon: <SettingOutlined /> },
+          ]}
+        />
+      </header>
       <main className="view">
-        {tab === 'chat' && <ChatView settings={settings} />}
+        {/* Keep Chat mounted so its conversation/stream state survives tab switches. */}
+        <div hidden={tab !== 'chat'} className="view-pane">
+          <ChatView settings={settings} />
+        </div>
         {tab === 'skills' && <SkillsView />}
         {tab === 'sessions' && <SessionsView />}
         {tab === 'settings' && <SettingsView settings={settings} />}

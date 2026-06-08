@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react';
+import { Alert, Button, Empty, Spin, Typography } from 'antd';
+import { ReloadOutlined } from '@ant-design/icons';
+import { Conversations } from '@ant-design/x';
 import type { SessionInfo } from '../../lib/types';
 import { sendRuntime } from '../hooks/usePort';
 
@@ -18,34 +21,45 @@ export function SessionsView() {
 
   useEffect(load, []);
 
+  const items = sessions.map((s) => ({
+    key: s.id,
+    label: s.title || s.id,
+    group: timeLabel(s.updated_at ?? s.created_at),
+  }));
+
   return (
-    <div className="list-view">
+    <div className="scroll-pane">
       <div className="row-between">
-        <h3>Sessions ({sessions.length})</h3>
-        <button className="link" onClick={load}>
+        <Typography.Title level={5} style={{ margin: 0 }}>
+          Sessions ({sessions.length})
+        </Typography.Title>
+        <Button size="small" icon={<ReloadOutlined />} onClick={load} loading={loading}>
           Refresh
-        </button>
+        </Button>
       </div>
-      {loading && <div className="loading">Loading…</div>}
-      {error && <div className="error-banner">{error}</div>}
-      {!loading && sessions.length === 0 && !error && (
-        <p className="empty">No prior sessions found.</p>
-      )}
-      {sessions.map((s) => (
-        <div key={s.id} className="card">
-          <div className="card-title">{s.title || s.id}</div>
-          <div className="card-desc">
-            {s.message_count != null && <span>{s.message_count} messages · </span>}
-            {formatTime(s.updated_at ?? s.created_at)}
-          </div>
+
+      {error && <Alert type="error" showIcon message={error} style={{ marginTop: 12 }} />}
+
+      {loading ? (
+        <div className="centered">
+          <Spin />
         </div>
-      ))}
+      ) : sessions.length === 0 ? (
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No prior sessions" />
+      ) : (
+        <Conversations items={items} groupable style={{ marginTop: 8 }} />
+      )}
     </div>
   );
 }
 
-function formatTime(t: string | number | undefined): string {
-  if (t == null) return '';
+function timeLabel(t: string | number | undefined): string {
+  if (t == null) return 'Earlier';
   const d = typeof t === 'number' ? new Date(t * (t < 1e12 ? 1000 : 1)) : new Date(t);
-  return isNaN(d.getTime()) ? String(t) : d.toLocaleString();
+  if (isNaN(d.getTime())) return 'Earlier';
+  const days = (Date.now() - d.getTime()) / 86_400_000;
+  if (days < 1) return 'Today';
+  if (days < 2) return 'Yesterday';
+  if (days < 7) return 'This week';
+  return 'Earlier';
 }
