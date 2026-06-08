@@ -9,20 +9,27 @@ export function usePort(onMessage: (msg: BackgroundToUi) => void) {
   const portRef = useRef<chrome.runtime.Port | null>(null);
   const handlerRef = useRef(onMessage);
   handlerRef.current = onMessage;
+  // A fully-wired connect(), exposed to send() so a reconnect-gap message still
+  // gets a port with its onMessage/onDisconnect listeners attached.
+  const connectRef = useRef<() => chrome.runtime.Port>(() => {
+    throw new Error('port not initialized');
+  });
 
   useEffect(() => {
     let disposed = false;
 
-    const connect = () => {
+    const connect = (): chrome.runtime.Port => {
       const port = chrome.runtime.connect({ name: 'hermes' });
-      portRef.current = port;
       port.onMessage.addListener((msg: BackgroundToUi) => handlerRef.current(msg));
       port.onDisconnect.addListener(() => {
         portRef.current = null;
         if (!disposed) setTimeout(connect, 250);
       });
+      portRef.current = port;
+      return port;
     };
 
+    connectRef.current = connect;
     connect();
     return () => {
       disposed = true;
@@ -32,8 +39,7 @@ export function usePort(onMessage: (msg: BackgroundToUi) => void) {
   }, []);
 
   const send = (msg: UiToBackground) => {
-    if (!portRef.current) portRef.current = chrome.runtime.connect({ name: 'hermes' });
-    portRef.current.postMessage(msg);
+    (portRef.current ?? connectRef.current()).postMessage(msg);
   };
 
   return { send };
