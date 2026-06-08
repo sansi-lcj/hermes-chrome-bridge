@@ -21,6 +21,9 @@ Best-practices pass across the audit items.
 - `SECURITY.md` threat model; README privacy / resilience / browser-support
   sections.
 - Conversation history is capped (`MAX_STORED_MESSAGES`).
+- **Integration tests**: a reusable OpenAI-compatible mock server
+  (`src/test/mockHermesServer.ts`) exercised against `HermesClient` over real
+  HTTP + SSE (models, streaming chat, runs + events, skills/sessions).
 
 ### Changed
 
@@ -33,7 +36,8 @@ Best-practices pass across the audit items.
 
 - Kept CRXJS rather than migrating to WXT (a framework swap mid-project is
   high-risk); cross-browser via a `browser.*` polyfill is documented as a
-  follow-up. End-to-end (Playwright) tests land in a dedicated follow-up PR.
+  follow-up. The HTTP/SSE layer now has real integration coverage; a full
+  in-browser Playwright harness (reusing the mock server) is a future addition.
 
 ## 1.2.0
 
