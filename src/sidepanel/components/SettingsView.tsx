@@ -1,121 +1,100 @@
 import { useState } from 'react';
+import { App, Button, Form, Input, Select, Space, Typography } from 'antd';
 import { setSettings } from '../../lib/storage';
 import type { ChatMode, ModelInfo, Settings } from '../../lib/types';
 import { originPattern } from '../../lib/url';
 import { sendRuntime } from '../hooks/usePort';
 
-type Status =
-  | { kind: 'idle' }
-  | { kind: 'saving' }
-  | { kind: 'ok'; message: string }
-  | { kind: 'error'; message: string };
-
 export function SettingsView({ settings }: { settings: Settings }) {
-  const [baseUrl, setBaseUrl] = useState(settings.baseUrl);
-  const [apiKey, setApiKey] = useState(settings.apiKey);
-  const [defaultModel, setDefaultModel] = useState(settings.defaultModel);
-  const [mode, setMode] = useState<ChatMode>(settings.mode);
-  const [status, setStatus] = useState<Status>({ kind: 'idle' });
+  const { message } = App.useApp();
+  const [form] = Form.useForm<Settings>();
+  const [busy, setBusy] = useState(false);
 
-  async function save(): Promise<boolean> {
-    setStatus({ kind: 'saving' });
-    const origin = originPattern(baseUrl);
+  async function persist(values: Settings): Promise<boolean> {
+    const origin = originPattern(values.baseUrl);
     if (!origin) {
-      setStatus({ kind: 'error', message: 'Enter a valid http(s) URL.' });
+      message.error('Enter a valid http(s) URL.');
       return false;
     }
-    // Grant the service worker permission to call this origin without CORS.
     const granted = await chrome.permissions.request({ origins: [origin] }).catch(() => false);
     if (!granted) {
-      setStatus({
-        kind: 'error',
-        message: `Host permission for ${origin} was not granted; requests will fail.`,
-      });
+      message.warning(`Host permission for ${origin} was not granted; requests will fail.`);
       return false;
     }
-    await setSettings({ baseUrl, apiKey, defaultModel, mode });
+    await setSettings(values);
     return true;
   }
 
   async function handleSave() {
-    if (await save()) setStatus({ kind: 'ok', message: 'Saved.' });
+    const values = await form.validateFields();
+    setBusy(true);
+    try {
+      if (await persist(values)) message.success('Saved.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function handleTest() {
-    if (!(await save())) return;
-    setStatus({ kind: 'saving' });
+    const values = await form.validateFields();
+    setBusy(true);
     try {
+      if (!(await persist(values))) return;
       const data = await sendRuntime<{ models: ModelInfo[] }>({
         type: 'api',
         action: 'testConnection',
       });
       const names = data.models?.map((m) => m.id).join(', ') || 'none';
-      setStatus({ kind: 'ok', message: `Connected. Models: ${names}` });
+      message.success(`Connected. Models: ${names}`);
     } catch (err) {
-      setStatus({ kind: 'error', message: String(err) });
+      message.error(String(err));
+    } finally {
+      setBusy(false);
     }
   }
 
   return (
-    <div className="settings">
-      <label className="field">
-        <span>Hermes base URL</span>
-        <input
-          type="text"
-          value={baseUrl}
-          placeholder="http://127.0.0.1:8642"
-          onChange={(e) => setBaseUrl(e.target.value)}
-        />
-      </label>
-
-      <label className="field">
-        <span>API key (bearer token)</span>
-        <input
-          type="password"
-          value={apiKey}
-          placeholder="API_SERVER_KEY"
-          onChange={(e) => setApiKey(e.target.value)}
-        />
-      </label>
-
-      <label className="field">
-        <span>Default model / agent</span>
-        <input type="text" value={defaultModel} onChange={(e) => setDefaultModel(e.target.value)} />
-      </label>
-
-      <label className="field">
-        <span>Default mode</span>
-        <select value={mode} onChange={(e) => setMode(e.target.value as ChatMode)}>
-          <option value="chat">Chat completions</option>
-          <option value="run">Runs (long tasks)</option>
-        </select>
-      </label>
-
-      <div className="actions">
-        <button
-          className="send"
-          onClick={() => void handleSave()}
-          disabled={status.kind === 'saving'}
+    <div className="scroll-pane">
+      <Form<Settings> form={form} layout="vertical" initialValues={settings} disabled={busy}>
+        <Form.Item
+          label="Hermes base URL"
+          name="baseUrl"
+          rules={[{ required: true, message: 'Required' }]}
         >
-          Save
-        </button>
-        <button
-          className="link"
-          onClick={() => void handleTest()}
-          disabled={status.kind === 'saving'}
-        >
-          Test connection
-        </button>
-      </div>
+          <Input placeholder="http://127.0.0.1:8642" />
+        </Form.Item>
 
-      {status.kind === 'saving' && <div className="loading">Working…</div>}
-      {status.kind === 'ok' && <div className="ok-banner">{status.message}</div>}
-      {status.kind === 'error' && <div className="error-banner">{status.message}</div>}
+        <Form.Item label="API key (bearer token)" name="apiKey">
+          <Input.Password placeholder="API_SERVER_KEY" />
+        </Form.Item>
 
-      <p className="hint">
+        <Form.Item label="Default model / agent" name="defaultModel">
+          <Input placeholder="hermes" />
+        </Form.Item>
+
+        <Form.Item label="Default mode" name="mode">
+          <Select<ChatMode>
+            options={[
+              { value: 'chat', label: 'Chat completions' },
+              { value: 'run', label: 'Runs (long tasks)' },
+            ]}
+          />
+        </Form.Item>
+
+        <Space>
+          <Button type="primary" loading={busy} onClick={handleSave}>
+            Save
+          </Button>
+          <Button onClick={handleTest} loading={busy}>
+            Test connection
+          </Button>
+        </Space>
+      </Form>
+
+      <Typography.Paragraph type="secondary" style={{ marginTop: 16, fontSize: 12 }}>
         All requests run from the extension background worker. Granting the host permission lets it
         reach your Hermes server without server-side CORS changes.
-      </p>
+      </Typography.Paragraph>
     </div>
   );
 }

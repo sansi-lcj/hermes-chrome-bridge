@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.1.0
+
+Rebuilt the presentation layer on **Ant Design X** (the Agent-focused component
+engine) and deepened Chrome integration.
+
+### Added — Chrome surfaces
+
+- **Context menus**: select text → "Ask Hermes about …"; right-click a page →
+  "Summarize this page with Hermes" (opens the panel pre-filled).
+- **Keyboard commands**: `Ctrl/Cmd+Shift+H` opens the side panel; a configurable
+  "new chat" command (chrome://extensions/shortcuts).
+- **Omnibox**: type `hermes <question>` in the address bar to ask the agent.
+- **Notifications**: a Run started from the panel now keeps running even if the
+  panel closes, and raises a desktop notification (with a snippet) when it
+  finishes; clicking it reopens the panel.
+
+### Changed — UI on Ant Design X
+
+- Messages render with `Bubble.List`; the composer uses `Sender` (with built-in
+  stop button); tool steps show in a `ThoughtChain`; the empty state uses
+  `Welcome` + `Prompts`; sessions use the `Conversations` component; settings use
+  antd `Form`. Theming via `XProvider` (dark algorithm, brand primary).
+
 ## 1.0.0
 
 First production-ready release.

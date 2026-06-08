@@ -201,3 +201,19 @@ export interface ApiRequest {
 }
 
 export type ApiResponse<T = unknown> = { ok: true; data: T } | { ok: false; error: string };
+
+// ---------------------------------------------------------------------------
+// Broadcasts from background -> side panel (chrome.runtime.sendMessage)
+// ---------------------------------------------------------------------------
+
+export interface PendingPromptBroadcast {
+  type: 'pendingPrompt';
+  text: string;
+  autoSend: boolean;
+}
+
+export interface NewChatBroadcast {
+  type: 'newChat';
+}
+
+export type PanelBroadcast = PendingPromptBroadcast | NewChatBroadcast;

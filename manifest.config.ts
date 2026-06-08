@@ -36,7 +36,27 @@ export default defineManifest({
       run_at: 'document_idle',
     },
   ],
-  permissions: ['sidePanel', 'storage', 'activeTab', 'scripting', 'tabs'],
+  // Address-bar shortcut: type "hermes <query>" + Enter to ask the agent.
+  omnibox: { keyword: 'hermes' },
+  // Keyboard shortcuts (configurable at chrome://extensions/shortcuts).
+  commands: {
+    'open-panel': {
+      suggested_key: { default: 'Ctrl+Shift+H', mac: 'Command+Shift+H' },
+      description: 'Open the Hermes side panel',
+    },
+    'new-chat': {
+      description: 'Start a new Hermes conversation',
+    },
+  },
+  permissions: [
+    'sidePanel',
+    'storage',
+    'activeTab',
+    'scripting',
+    'tabs',
+    'contextMenus',
+    'notifications',
+  ],
   // The configured Hermes origin is requested at runtime (on Settings save) via
   // chrome.permissions.request so the service worker can call it without CORS.
   optional_host_permissions: ['http://*/*', 'https://*/*'],

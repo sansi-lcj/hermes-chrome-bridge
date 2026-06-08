@@ -15,5 +15,7 @@ export default defineConfig({
   build: {
     target: 'esnext',
     sourcemap: true,
+    // The antd + Ant Design X side panel is intentionally a single local bundle.
+    chunkSizeWarningLimit: 1500,
   },
 });

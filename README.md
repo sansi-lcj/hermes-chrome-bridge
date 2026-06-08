@@ -4,14 +4,23 @@ A Chrome extension (Manifest V3) that bridges Chrome to a **deployed [Hermes Age
 
 Hermes Agent exposes an OpenAI-compatible HTTP API server. This extension talks to it from a docked **side panel**, with streaming chat, page context, long-running tasks (Runs API), and skill/session browsing.
 
+The UI is built on **[Ant Design X](https://x.ant.design/)** — Ant Design's component engine for AI/Agent interfaces (Bubble, Sender, ThoughtChain, Conversations, Welcome/Prompts).
+
 ## Features
 
-- **Side-panel chat** with live token streaming (SSE), **Markdown rendering** (code blocks, lists, links), and a collapsible tool-progress trail.
+- **Side-panel chat** on Ant Design X with live token streaming (SSE), **Markdown rendering** (code blocks, lists, links), and a `ThoughtChain` tool-progress trail.
 - **Conversation persistence** — your chat survives closing the panel; start fresh with **New chat**.
 - **Page context** — attach the current tab's selection or readable text to your message.
-- **Runs mode** — drive long, autonomous tasks via the `/v1/runs` API with live events and cancel.
+- **Runs mode** — drive long, autonomous tasks via the `/v1/runs` API. Runs keep going even if you close the panel and notify you when finished.
 - **Skills & Sessions** — browse `/v1/skills`, `/v1/toolsets`, and `/api/sessions`.
 - **Settings** — configure base URL, bearer key, default model/mode; one-click connection test.
+
+### Chrome integration
+
+- **Context menus** — select text → "Ask Hermes about …"; right-click a page → "Summarize this page with Hermes".
+- **Keyboard shortcuts** — `Ctrl/Cmd+Shift+H` opens the panel; a "new chat" command (customizable at `chrome://extensions/shortcuts`).
+- **Omnibox** — type `hermes <question>` in the address bar to ask the agent.
+- **Desktop notifications** — long Runs ping you when they complete, even if the panel is closed.
 
 All Hermes network calls run in the **background service worker**, which holds the API key and (with a granted host permission for your configured origin) reaches the server without any server-side CORS changes.
 
