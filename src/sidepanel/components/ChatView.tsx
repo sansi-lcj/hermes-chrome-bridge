@@ -44,14 +44,15 @@ export function ChatView({ settings }: { settings: Settings }) {
   const { send } = usePort((msg: BackgroundToUi) => {
     if (msg.requestId !== activeReq.current) return;
     setMessages((prev) => {
-      const next = [...prev];
-      const last = next[next.length - 1];
+      const last = prev[prev.length - 1];
       if (!last || last.role !== 'assistant') return prev;
-      if (msg.type === 'chat.delta') last.content += msg.content;
+      const updated: StoredMessage = { ...last };
+      if (msg.type === 'chat.delta') updated.content = last.content + msg.content;
       else if (msg.type === 'chat.tool')
-        last.tools = [...(last.tools ?? []), formatTool(msg.progress)];
-      else if (msg.type === 'error') last.content += `\n\n> ⚠️ ${msg.message}`;
-      return next;
+        updated.tools = [...(last.tools ?? []), formatTool(msg.progress)];
+      else if (msg.type === 'error') updated.content = last.content + `\n\n> ⚠️ ${msg.message}`;
+      else return prev;
+      return [...prev.slice(0, -1), updated];
     });
     if (msg.type === 'chat.done' || msg.type === 'error') {
       setStreaming(false);
@@ -69,11 +70,12 @@ export function ChatView({ settings }: { settings: Settings }) {
     setMode(settings.mode);
   }, [settings.defaultModel, settings.mode]);
 
+  // Refresh the model list whenever the connection settings change.
   useEffect(() => {
     sendRuntime<ModelInfo[]>({ type: 'api', action: 'models' })
       .then(setModels)
       .catch(() => setModels([]));
-  }, []);
+  }, [settings.baseUrl, settings.apiKey]);
 
   // Persist completed turns.
   useEffect(() => {
@@ -138,11 +140,15 @@ export function ChatView({ settings }: { settings: Settings }) {
   const newChatRef = useRef(handleNewChat);
   newChatRef.current = handleNewChat;
 
-  // Consume a pending prompt on open + live broadcasts (context menu/omnibox/cmd).
+  // Consume a pending prompt on open and whenever an entry point pokes us.
+  // Storage is the single source of truth (consumed once), so a prompt is never
+  // applied twice across the mount-read and the live-poke paths.
   useEffect(() => {
-    takePendingPrompt().then((p) => p && applyRef.current(p.text, p.autoSend));
+    const consume = () =>
+      takePendingPrompt().then((p) => p && applyRef.current(p.text, p.autoSend));
+    consume();
     const listener = (msg: PanelBroadcast) => {
-      if (msg.type === 'pendingPrompt') applyRef.current(msg.text, msg.autoSend);
+      if (msg.type === 'pendingPrompt') consume();
       else if (msg.type === 'newChat') newChatRef.current();
     };
     chrome.runtime.onMessage.addListener(listener);

@@ -67,11 +67,8 @@ interface ActiveStream {
   isRun: boolean;
 }
 
-const panelPorts = new Set<chrome.runtime.Port>();
-
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== PORT_NAME) return;
-  panelPorts.add(port);
 
   const active = new Map<string, ActiveStream>();
   const channel: Channel = {
@@ -106,7 +103,6 @@ chrome.runtime.onConnect.addListener((port) => {
   });
 
   port.onDisconnect.addListener(() => {
-    panelPorts.delete(port);
     channel.alive = false; // future posts are dropped
     // Cancel quick chat streams, but let long Runs finish in the background.
     for (const stream of active.values()) {
@@ -185,21 +181,26 @@ function extractRunText(data: unknown): string | undefined {
 // Context menus, commands, omnibox -> open panel with a pending prompt
 // ---------------------------------------------------------------------------
 
-chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId === MENU_ASK && info.selectionText) {
-    await dispatchPrompt(`About this text:\n\n"""\n${info.selectionText}\n"""\n\n`, false, tab);
-  } else if (info.menuItemId === MENU_SUMMARIZE) {
-    const ctx = await readPageContext(tab?.id).catch(() => null);
-    const body = ctx ? `${ctx.title}\n${ctx.url}\n\n${ctx.text}` : '';
-    await dispatchPrompt(`Summarize this page:\n\n${body}`, true, tab);
-  }
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  // Open the panel synchronously so the user-gesture requirement for
+  // sidePanel.open() is satisfied before any await; then hand off the prompt.
+  openPanelSync(tab);
+  void (async () => {
+    if (info.menuItemId === MENU_ASK && info.selectionText) {
+      await deliverPrompt(`About this text:\n\n"""\n${info.selectionText}\n"""\n`, false);
+    } else if (info.menuItemId === MENU_SUMMARIZE) {
+      const ctx = await readPageContext(tab?.id).catch(() => null);
+      const body = ctx ? `${ctx.title}\n${ctx.url}\n\n${ctx.text}` : '';
+      await deliverPrompt(`Summarize this page:\n\n${body}`, true);
+    }
+  })();
 });
 
-chrome.commands.onCommand.addListener(async (command, tab) => {
+chrome.commands.onCommand.addListener((command, tab) => {
   if (command === 'open-panel') {
-    await openPanel(tab);
+    openPanelSync(tab);
   } else if (command === 'new-chat') {
-    await openPanel(tab);
+    openPanelSync(tab);
     broadcast({ type: 'newChat' });
   }
 });
@@ -208,35 +209,38 @@ chrome.omnibox.onInputEntered.addListener(async (text) => {
   const query = text.trim();
   if (!query) return;
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  await dispatchPrompt(query, true, tab);
+  openPanelSync(tab);
+  await deliverPrompt(query, true);
 });
 
 chrome.omnibox.setDefaultSuggestion({
   description: 'Ask the Hermes Agent: type your question and press Enter',
 });
 
-/** Store a prompt, open the panel, and notify it (covers open and closed). */
-async function dispatchPrompt(
-  text: string,
-  autoSend: boolean,
-  tab?: chrome.tabs.Tab,
-): Promise<void> {
+/**
+ * Persist a prompt and poke any open panel to consume it. The panel always
+ * reads the prompt from storage (single source of truth, consumed once), so it
+ * is applied exactly once whether the panel was already open or opens fresh.
+ */
+async function deliverPrompt(text: string, autoSend: boolean): Promise<void> {
   await setPendingPrompt({ text, autoSend });
-  await openPanel(tab);
-  broadcast({ type: 'pendingPrompt', text, autoSend });
+  broadcast({ type: 'pendingPrompt' });
 }
 
-/** Open the side panel for the given tab/window (requires a user gesture). */
-async function openPanel(tab?: chrome.tabs.Tab): Promise<void> {
-  try {
-    if (tab?.windowId != null) await chrome.sidePanel.open({ windowId: tab.windowId });
-    else {
-      const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (active?.windowId != null) await chrome.sidePanel.open({ windowId: active.windowId });
-    }
-  } catch (err) {
-    // If the gesture was consumed, the pending prompt still loads on next open.
-    console.warn('sidePanel.open failed', err);
+/** Open the side panel synchronously within a user gesture (best-effort). */
+function openPanelSync(tab?: chrome.tabs.Tab): void {
+  const windowId = tab?.windowId;
+  if (windowId == null) return;
+  chrome.sidePanel.open({ windowId }).catch((err) => console.warn('sidePanel.open failed', err));
+}
+
+/** Open the side panel for the currently active window (notification click). */
+async function openPanel(): Promise<void> {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab?.windowId != null) {
+    await chrome.sidePanel
+      .open({ windowId: tab.windowId })
+      .catch((err) => console.warn('sidePanel.open failed', err));
   }
 }
 

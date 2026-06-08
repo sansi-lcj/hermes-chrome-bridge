@@ -206,10 +206,13 @@ export type ApiResponse<T = unknown> = { ok: true; data: T } | { ok: false; erro
 // Broadcasts from background -> side panel (chrome.runtime.sendMessage)
 // ---------------------------------------------------------------------------
 
+/**
+ * Poke telling an open panel to consume the pending prompt from storage. The
+ * prompt itself travels via storage (consumed exactly once) so this carries no
+ * payload — avoiding duplicate application across the storage + broadcast paths.
+ */
 export interface PendingPromptBroadcast {
   type: 'pendingPrompt';
-  text: string;
-  autoSend: boolean;
 }
 
 export interface NewChatBroadcast {

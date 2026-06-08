@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.1.1
+
+Bug-fix release from a full code audit.
+
+### Fixed
+
+- **Side panel could fail to open from a context menu / omnibox.** The pending
+  prompt was stored (`await`) before `chrome.sidePanel.open()`, which consumed
+  the user gesture and could make `open()` throw. The panel now opens
+  synchronously within the gesture, then the prompt is handed off.
+- **Pending prompt applied twice / stale.** The prompt was delivered via both a
+  broadcast payload and storage; an open panel never consumed the stored copy,
+  so it could re-apply on a later open (or double auto-send). The broadcast is
+  now a data-less poke and storage is the single source of truth, consumed
+  exactly once (regression test added).
+- **Lost responses during a port reconnect gap.** `usePort`'s `send()` fallback
+  created a bare port with no listeners, dropping streamed replies; it now reuses
+  the fully-wired connection.
+- **React state was mutated in place** in the streaming message handler; it now
+  produces new objects.
+- **Model list stayed stale** after configuring the connection in Settings; it
+  now refreshes when the base URL / API key change.
+- Removed an unused `panelPorts` set.
+
 ## 1.1.0
 
 Rebuilt the presentation layer on **Ant Design X** (the Agent-focused component
