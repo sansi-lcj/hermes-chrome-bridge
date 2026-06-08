@@ -72,7 +72,17 @@ sidepanel (React) ⇄ Port ⇄ background SW ⇄ fetch/SSE ⇄ Hermes API
 - `src/lib/storage.ts`, `src/lib/conversation.ts` — settings & chat persistence
 - `src/background/index.ts` — owns all Hermes access, streams over a Port
 - `src/content/index.ts` — supplies page context on demand
-- `src/sidepanel/**` — React UI (Chat / Skills / Sessions / Settings)
+- `src/stores/**` — **MobX** state: `SettingsStore`, `UiStore`, `CatalogStore`,
+  `ChatStore` (conversation + Port + streaming), `SettingsFormStore`
+- `src/sidepanel/**` — React UI; components are MobX `observer()`s that read the
+  stores (no hooks — state and side effects live in the stores)
+
+### State management
+
+State is held in MobX stores (singletons created at module load, imported
+directly — no Context/Provider). View components are `observer()`-wrapped and
+simply read observables and call store actions; side effects run via store
+constructors and `reaction`/`autorun`, so the UI code is hook-free.
 
 ## License
 

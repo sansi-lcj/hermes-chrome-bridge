@@ -91,6 +91,22 @@ body {
   align-items: center;
 }
 
+/* Settings form (store-driven, no antd Form) */
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.field > span {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
 /* Markdown rendering inside assistant bubbles */
 .markdown > *:first-child {
   margin-top: 0;

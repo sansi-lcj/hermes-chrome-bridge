@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.2.0
+
+State management moved to **MobX**, eliminating React hooks from the app code.
+
+### Changed
+
+- Introduced `src/stores/` with observable stores: `SettingsStore`, `UiStore`,
+  `CatalogStore` (skills/sessions), `ChatStore` (conversation + Port + streaming),
+  and `SettingsFormStore` (form draft). Singletons are created once at module
+  load and imported directly — no Context/Provider.
+- All view components are now `observer()`s that read store state and call store
+  actions. Removed `useState`/`useEffect`/`useRef`/`useMemo` and the custom
+  `usePort` hook; `Markdown` uses `React.memo`. The codebase is hook-free.
+- Side effects (Port connection/reconnect, settings/model/skills/session
+  loading, pending-prompt consumption, conversation persistence, tab-driven
+  lazy loading) are handled by store constructors and MobX `reaction`/`autorun`.
+- `sendRuntime` moved to `src/lib/messaging.ts`.
+
+### Added
+
+- `ChatStore` unit tests (dispatch, streamed deltas, stale-request guard,
+  no double-send, new chat).
+
 ## 1.1.1
 
 Bug-fix release from a full code audit.

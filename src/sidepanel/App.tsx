@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { observer } from 'mobx-react-lite';
 import { Segmented } from 'antd';
 import {
   MessageOutlined,
@@ -6,38 +6,24 @@ import {
   HistoryOutlined,
   SettingOutlined,
 } from '@ant-design/icons';
-import { getSettings, onSettingsChanged } from '../lib/storage';
-import { DEFAULT_SETTINGS, type Settings } from '../lib/types';
+import { settingsStore, uiStore } from '../stores';
+import type { Tab } from '../stores/UiStore';
 import { ChatView } from './components/ChatView';
 import { SkillsView } from './components/SkillsView';
 import { SessionsView } from './components/SessionsView';
 import { SettingsView } from './components/SettingsView';
 
-type Tab = 'chat' | 'skills' | 'sessions' | 'settings';
+export const App = observer(function App() {
+  if (!settingsStore.loaded) return <div className="loading">Loading…</div>;
 
-export function App() {
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [loaded, setLoaded] = useState(false);
-  const [tab, setTab] = useState<Tab>('chat');
-
-  useEffect(() => {
-    getSettings().then((s) => {
-      setSettings(s);
-      setLoaded(true);
-      if (!s.baseUrl || !s.apiKey) setTab('settings');
-    });
-    return onSettingsChanged(setSettings);
-  }, []);
-
-  if (!loaded) return <div className="loading">Loading…</div>;
-
+  const tab = uiStore.tab;
   return (
     <div className="app">
       <header className="topbar">
         <Segmented<Tab>
           block
           value={tab}
-          onChange={setTab}
+          onChange={(value) => uiStore.setTab(value)}
           options={[
             { value: 'chat', label: 'Chat', icon: <MessageOutlined /> },
             { value: 'skills', label: 'Skills', icon: <ThunderboltOutlined /> },
@@ -47,14 +33,14 @@ export function App() {
         />
       </header>
       <main className="view">
-        {/* Keep Chat mounted so its conversation/stream state survives tab switches. */}
+        {/* Keep Chat mounted so its stream/conversation survives tab switches. */}
         <div hidden={tab !== 'chat'} className="view-pane">
-          <ChatView settings={settings} />
+          <ChatView />
         </div>
         {tab === 'skills' && <SkillsView />}
         {tab === 'sessions' && <SessionsView />}
-        {tab === 'settings' && <SettingsView settings={settings} />}
+        {tab === 'settings' && <SettingsView />}
       </main>
     </div>
   );
-}
+});
