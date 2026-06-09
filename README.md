@@ -42,6 +42,29 @@ Then load it:
 1. Open `chrome://extensions`, enable **Developer mode**.
 2. Click **Load unpacked** and select the generated `dist/` folder.
 
+## Verify locally (no backend required)
+
+A built-in **mock Hermes server** lets you exercise every feature on your own
+machine without a deployed agent:
+
+```bash
+npm run mock     # starts a mock Hermes on http://127.0.0.1:8642
+npm run build    # then Load unpacked → dist/  (in another terminal)
+```
+
+Then in the side panel:
+
+1. **Settings** → base URL `http://127.0.0.1:8642`, any API key → grant the
+   permission prompt → **Test connection** (expect `hermes, hermes-pro`).
+2. **Chat** → send a message → watch the streamed `**Hello** from the mock…`.
+3. **Tools** on → ask _"what tabs are open?"_ → the agent calls `list_tabs` and
+   answers (tool steps show in the trail).
+4. Tools on (Ask mode) → ask _"please run an action"_ → an **Allow/Deny** card
+   appears for `open_url`; **Allow** runs it.
+5. **Skills**, **Sessions** tabs populate; **Run mode** streams via the Runs API.
+
+Point the same Settings at your real Hermes URL to verify against your backend.
+
 ## Usage
 
 1. Click the toolbar icon to open the side panel.

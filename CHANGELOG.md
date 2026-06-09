@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.6.1
+
+Local hands-on verification tooling.
+
+### Added
+
+- **Mock Hermes dev server** (`npm run mock`, `scripts/mock-server.mjs`): a
+  deterministic OpenAI-compatible server on `http://127.0.0.1:8642` so you can
+  exercise chat streaming, the tool-loop, action confirmation, runs, and the
+  discovery tabs in a real Chrome **without a deployed backend**.
+- README "Verify locally" walkthrough.
+
 ## 1.6.0
 
 Page **perception + DOM actions** — the agent can now operate the page, with
