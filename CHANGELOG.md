@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.3.1
+
+End-to-end tests — which immediately caught a real regression.
+
+### Fixed
+
+- **Chat composer crashed on input.** `ChatStore`'s action methods were
+  explicitly annotated `action` with `makeObservable`'s `autoBind`, which does
+  **not** bind explicitly-annotated members — so `onChange={s.setInput}` ran with
+  `this === undefined` and threw. Methods are now `action.bound`.
+
+### Added
+
+- **Playwright end-to-end tests** that load the unpacked extension in headless
+  Chromium (`--headless=new`), drive Settings → save → chat, and assert the SSE
+  answer renders — reusing the mock Hermes server. New `e2e/` suite, an E2E build
+  mode (`build:e2e`, statically grants the loopback origin), and an **E2E CI
+  workflow**.
+
 ## 1.3.0
 
 Best-practices pass across the audit items.

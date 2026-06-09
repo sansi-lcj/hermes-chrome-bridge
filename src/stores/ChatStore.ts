@@ -55,41 +55,40 @@ export class ChatStore {
   private odToken = 0;
 
   constructor(private settings: SettingsStore) {
-    makeObservable(
-      this,
-      {
-        messages: observable,
-        input: observable,
-        mode: observable,
-        model: observable,
-        models: observable,
-        attachContext: observable,
-        streaming: observable,
-        onDevice: observable,
-        onDeviceSupported: observable,
-        modelOptions: computed,
-        canSend: computed,
-        setInput: action,
-        setMode: action,
-        setModel: action,
-        setAttachContext: action,
-        setOnDevice: action,
-        detectOnDevice: action,
-        runOnDevice: action,
-        syncDefaults: action,
-        loadModels: action,
-        restore: action,
-        onPortMessage: action,
-        sendMessage: action,
-        dispatch: action,
-        stop: action,
-        newChat: action,
-        consumePending: action,
-        apply: action,
-        onBroadcast: action,
-      },
-      { autoBind: true },
-    );
+    makeObservable(this, {
+      messages: observable,
+      input: observable,
+      mode: observable,
+      model: observable,
+      models: observable,
+      attachContext: observable,
+      streaming: observable,
+      onDevice: observable,
+      onDeviceSupported: observable,
+      modelOptions: computed,
+      canSend: computed,
+      // action.bound so methods stay safe when passed directly as callbacks
+      // (e.g. onChange={s.setInput}); makeObservable's autoBind does not apply
+      // to explicitly-annotated members.
+      setInput: action.bound,
+      setMode: action.bound,
+      setModel: action.bound,
+      setAttachContext: action.bound,
+      setOnDevice: action.bound,
+      detectOnDevice: action.bound,
+      runOnDevice: action.bound,
+      syncDefaults: action.bound,
+      loadModels: action.bound,
+      restore: action.bound,
+      onPortMessage: action.bound,
+      sendMessage: action.bound,
+      dispatch: action.bound,
+      stop: action.bound,
+      newChat: action.bound,
+      consumePending: action.bound,
+      apply: action.bound,
+      onBroadcast: action.bound,
+    });
 
     this.model = settings.defaultModel;
     this.mode = settings.mode;

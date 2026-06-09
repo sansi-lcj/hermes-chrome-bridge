@@ -4,7 +4,9 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
 
 export default tseslint.config(
-  { ignores: ['dist/', 'node_modules/', 'scripts/', 'release/', 'coverage/'] },
+  {
+    ignores: ['dist/', 'dist-e2e/', 'node_modules/', 'scripts/', 'release/', 'coverage/'],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
@@ -22,6 +24,16 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       '@typescript-eslint/no-explicit-any': 'warn',
+    },
+  },
+  {
+    // Node-context files: Playwright E2E and build/test configs. `use` here is a
+    // Playwright fixture, not a React hook.
+    files: ['e2e/**/*.ts', '*.config.{ts,js}'],
+    languageOptions: { globals: { ...globals.node } },
+    rules: {
+      'react-hooks/rules-of-hooks': 'off',
+      'no-empty-pattern': 'off',
     },
   },
 );

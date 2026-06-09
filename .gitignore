@@ -1,6 +1,9 @@
 node_modules/
 dist/
+dist-e2e/
 release/
+test-results/
+playwright-report/
 .env
 .env.*
 *.log

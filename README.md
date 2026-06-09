@@ -71,14 +71,18 @@ additionally need a `browser.*` polyfill — not yet wired up.
 ```bash
 npm run dev         # Vite + CRXJS with HMR (writes dist/, reloads on change)
 npm run typecheck   # tsc --noEmit
-npm run test        # Vitest unit tests
-npm run lint        # ESLint + Prettier check
+npm run test        # Vitest unit + integration tests
+npm run e2e         # Playwright E2E: build the extension and drive it in Chromium
+npm run lint        # ESLint 9 (flat config) + Prettier check
 npm run format      # Prettier --write
 npm run icons       # regenerate PNG icons from scripts/generate-icons.mjs
 npm run package     # build + zip a Web Store archive into release/
 ```
 
-CI (`.github/workflows/ci.yml`) runs type-check, lint, tests, build, and an icon-freshness check on every push and PR.
+CI runs type-check, lint, tests, build, and an icon-freshness check
+(`ci.yml`), plus the Playwright end-to-end suite (`e2e.yml`) on every push and
+PR. The E2E tests load the unpacked extension in headless Chromium and exercise
+the Settings → chat flow against the mock Hermes server.
 
 ## Architecture
 
