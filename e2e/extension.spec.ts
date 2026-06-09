@@ -33,6 +33,25 @@ test('configure connection, then stream a chat answer end-to-end', async ({
   await expect(page.getByText('Hello world')).toBeVisible();
 });
 
+test('agent tools: the agent calls a browser tool, then answers', async ({ page, extensionId }) => {
+  await page.goto(`chrome-extension://${extensionId}/src/sidepanel/index.html`);
+  await page.getByPlaceholder('http://127.0.0.1:8642').fill(server.url);
+  await page.getByPlaceholder('API_SERVER_KEY').fill('test-key');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText('Saved.')).toBeVisible();
+
+  await page.getByLabel('segmented control').getByText('Chat').click();
+  await page.getByLabel('Agent tools').click(); // enable tool use
+
+  const composer = page.getByPlaceholder(/Message the agent/);
+  await composer.fill('what tabs do I have open?');
+  await composer.press('Enter');
+
+  // The agent requests list_tabs (shown in the tool trail) and then answers.
+  await expect(page.getByText('Tools done')).toBeVisible();
+  await expect(page.getByText(/list_tabs/).first()).toBeVisible();
+});
+
 test('Test connection reports the mock models', async ({ page, extensionId }) => {
   await page.goto(`chrome-extension://${extensionId}/src/sidepanel/index.html`);
   await page.getByPlaceholder('http://127.0.0.1:8642').fill(server.url);

@@ -12,11 +12,12 @@ import { HermesClient, HermesError } from '../lib/hermesClient';
 import { setPendingPrompt } from '../lib/pending';
 import { addRun, listRuns, removeRun } from '../lib/runRegistry';
 import { getSettings } from '../lib/storage';
+import { runTool, toolSpecs } from '../lib/tools';
 import type {
   ApiRequest,
   ApiResponse,
   BackgroundToUi,
-  ChatMessage,
+  ChatStartRequest,
   PageContext,
   PanelBroadcast,
   UiToBackground,
@@ -92,14 +93,7 @@ chrome.runtime.onConnect.addListener((port) => {
     if (msg.type === 'chat.start') {
       const controller = new AbortController();
       active.set(msg.requestId, { controller, isRun: msg.useRun });
-      void runStream(
-        msg.requestId,
-        msg.messages,
-        msg.model,
-        msg.useRun,
-        controller,
-        channel,
-      ).finally(() => active.delete(msg.requestId));
+      void runStream(msg, controller, channel).finally(() => active.delete(msg.requestId));
     }
   });
 
@@ -113,15 +107,40 @@ chrome.runtime.onConnect.addListener((port) => {
 });
 
 async function runStream(
-  requestId: string,
-  messages: ChatMessage[],
-  model: string,
-  useRun: boolean,
+  req: ChatStartRequest,
   controller: AbortController,
   channel: Channel,
 ): Promise<void> {
+  const { requestId, messages, model, useRun, useTools } = req;
   const hermes = await client();
   try {
+    if (useTools) {
+      for await (const ev of hermes.runToolLoop(
+        messages,
+        model,
+        toolSpecs(),
+        runTool,
+        controller.signal,
+      )) {
+        if (ev.kind === 'tool-call')
+          channel.post({
+            type: 'chat.tool',
+            requestId,
+            progress: { name: ev.name, message: `calling ${ev.name}(${ev.args.slice(0, 120)})` },
+          });
+        else if (ev.kind === 'tool-result')
+          channel.post({
+            type: 'chat.tool',
+            requestId,
+            progress: { name: ev.name, status: 'done' },
+          });
+        else if (ev.kind === 'final')
+          channel.post({ type: 'chat.delta', requestId, content: ev.content });
+      }
+      channel.post({ type: 'chat.done', requestId });
+      return;
+    }
+
     if (useRun) {
       const run = await hermes.createRun(messages, model);
       await addRun(run.id, model); // survive a service-worker restart

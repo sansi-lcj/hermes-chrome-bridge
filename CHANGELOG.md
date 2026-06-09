@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.5.0
+
+Agent **browser tools** — the Hermes Agent can now use Chrome's capabilities.
+
+### Added
+
+- **Tool-use loop**: with the new **Agent tools** toggle, the agent can call
+  browser tools via OpenAI-style function calling. The background runs each tool
+  through Chrome APIs and feeds the result back until the agent answers; tool
+  steps appear in the message's ThoughtChain. Round-capped (`MAX_TOOL_ROUNDS`).
+- **Tools** (using already-granted permissions — no new prompts): `list_tabs`,
+  `read_active_page`, `open_url` (`src/lib/tools.ts`).
+- `HermesClient.chatCompletion` (non-streaming) + `runToolLoop`; the mock server
+  now supports the tool-call round-trip.
+- Tests: tool executors, the tool-loop integration test, and an E2E that enables
+  tools and verifies the agent calls `list_tabs` then answers. 59 unit tests +
+  3 E2E.
+
 ## 1.4.0
 
 Migrated state management from **MobX to Zustand**.

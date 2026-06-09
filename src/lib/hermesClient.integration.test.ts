@@ -65,6 +65,30 @@ describe('HermesClient integration (real HTTP + SSE)', () => {
     expect((await client.sessions())[0].id).toBe('s1');
   });
 
+  it('runs a tool-use loop: requests a tool, then answers', async () => {
+    const calls: string[] = [];
+    const fakeRunTool = async (name: string) => {
+      calls.push(name);
+      return JSON.stringify([{ title: 'Tab', url: 'https://x' }]);
+    };
+    const ac = new AbortController();
+    const events: string[] = [];
+    let answer = '';
+    for await (const ev of client.runToolLoop(
+      [{ role: 'user', content: 'what tabs are open?' }],
+      'hermes',
+      [{ type: 'function', function: { name: 'list_tabs', description: 'd', parameters: {} } }],
+      fakeRunTool,
+      ac.signal,
+    )) {
+      events.push(ev.kind);
+      if (ev.kind === 'final') answer = ev.content;
+    }
+    expect(calls).toEqual(['list_tabs']);
+    expect(events).toEqual(['tool-call', 'tool-result', 'final']);
+    expect(answer).toBe('Tools done');
+  });
+
   it('reports a clear error for a missing endpoint', async () => {
     await expect(client.health()).resolves.toBeTruthy();
   });
