@@ -1,9 +1,8 @@
-import { observer } from 'mobx-react-lite';
 import { Button, Select, Switch, Tooltip } from 'antd';
 import { EditOutlined, FileTextOutlined, RobotOutlined } from '@ant-design/icons';
 import { Bubble, Prompts, Sender, ThoughtChain, Welcome } from '@ant-design/x';
 import type { BubbleItemType, BubbleListProps } from '@ant-design/x';
-import { chatStore } from '../../stores';
+import { useChatStore } from '../../stores';
 import { Markdown } from './Markdown';
 
 const SUGGESTIONS = [
@@ -22,16 +21,37 @@ const ROLE: BubbleListProps['role'] = {
   },
 };
 
-export const ChatView = observer(function ChatView() {
-  const s = chatStore;
+export function ChatView() {
+  const messages = useChatStore((s) => s.messages);
+  const input = useChatStore((s) => s.input);
+  const streaming = useChatStore((s) => s.streaming);
+  const model = useChatStore((s) => s.model);
+  const mode = useChatStore((s) => s.mode);
+  const models = useChatStore((s) => s.models);
+  const attachContext = useChatStore((s) => s.attachContext);
+  const onDevice = useChatStore((s) => s.onDevice);
+  const onDeviceSupported = useChatStore((s) => s.onDeviceSupported);
 
-  const items: BubbleItemType[] = s.messages.map((m, i) => {
-    const isLast = i === s.messages.length - 1;
+  const setInput = useChatStore((s) => s.setInput);
+  const setModel = useChatStore((s) => s.setModel);
+  const setMode = useChatStore((s) => s.setMode);
+  const setAttachContext = useChatStore((s) => s.setAttachContext);
+  const setOnDevice = useChatStore((s) => s.setOnDevice);
+  const sendMessage = useChatStore((s) => s.sendMessage);
+  const stop = useChatStore((s) => s.stop);
+  const newChat = useChatStore((s) => s.newChat);
+
+  const ids = new Set(models.map((m) => m.id));
+  if (model) ids.add(model);
+  const modelOptions = [...ids].map((id) => ({ value: id, label: id }));
+
+  const items: BubbleItemType[] = messages.map((m, i) => {
+    const isLast = i === messages.length - 1;
     return {
       key: String(i),
       role: m.role === 'user' ? 'user' : 'ai',
       content: m.content,
-      loading: m.role === 'assistant' && !m.content && s.streaming && isLast,
+      loading: m.role === 'assistant' && !m.content && streaming && isLast,
       footer:
         m.tools && m.tools.length > 0 ? (
           <ThoughtChain
@@ -50,17 +70,18 @@ export const ChatView = observer(function ChatView() {
       <div className="chat-toolbar">
         <Select
           size="small"
-          value={s.model}
-          onChange={s.setModel}
-          options={s.modelOptions}
+          value={model}
+          onChange={setModel}
+          options={modelOptions}
           style={{ minWidth: 120 }}
           popupMatchSelectWidth={false}
         />
         <Tooltip title="Use the Runs API for long autonomous tasks">
           <Switch
             size="small"
-            checked={s.mode === 'run'}
-            onChange={(v) => s.setMode(v ? 'run' : 'chat')}
+            aria-label="Run mode"
+            checked={mode === 'run'}
+            onChange={(v) => setMode(v ? 'run' : 'chat')}
             checkedChildren="Run"
             unCheckedChildren="Chat"
           />
@@ -69,31 +90,31 @@ export const ChatView = observer(function ChatView() {
           <Switch
             size="small"
             aria-label="Attach page context"
-            checked={s.attachContext}
-            onChange={s.setAttachContext}
+            checked={attachContext}
+            onChange={setAttachContext}
             checkedChildren={<FileTextOutlined />}
             unCheckedChildren={<FileTextOutlined />}
           />
         </Tooltip>
-        {s.onDeviceSupported && (
+        {onDeviceSupported && (
           <Tooltip title="Answer on-device with Chrome's built-in AI (private, no network)">
             <Switch
               size="small"
               aria-label="Use on-device AI"
-              checked={s.onDevice}
-              onChange={s.setOnDevice}
+              checked={onDevice}
+              onChange={setOnDevice}
               checkedChildren="On-device"
               unCheckedChildren={<RobotOutlined />}
             />
           </Tooltip>
         )}
-        <Button size="small" icon={<EditOutlined />} onClick={s.newChat} className="new-chat">
+        <Button size="small" icon={<EditOutlined />} onClick={newChat} className="new-chat">
           New chat
         </Button>
       </div>
 
       <div className="messages">
-        {s.messages.length === 0 ? (
+        {messages.length === 0 ? (
           <div className="welcome">
             <Welcome
               variant="borderless"
@@ -103,7 +124,7 @@ export const ChatView = observer(function ChatView() {
             <Prompts
               title="Try"
               items={SUGGESTIONS}
-              onItemClick={(info) => s.setInput(String(info.data.label))}
+              onItemClick={(info) => setInput(String(info.data.label))}
             />
           </div>
         ) : (
@@ -113,14 +134,14 @@ export const ChatView = observer(function ChatView() {
 
       <div className="composer">
         <Sender
-          value={s.input}
-          loading={s.streaming}
-          onChange={s.setInput}
-          onSubmit={s.sendMessage}
-          onCancel={s.stop}
+          value={input}
+          loading={streaming}
+          onChange={setInput}
+          onSubmit={sendMessage}
+          onCancel={stop}
           placeholder="Message the agent…  (Shift+Enter for newline)"
         />
       </div>
     </div>
   );
-});
+}

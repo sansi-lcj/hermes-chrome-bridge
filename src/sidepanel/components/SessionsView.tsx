@@ -1,11 +1,18 @@
-import { observer } from 'mobx-react-lite';
 import { Alert, Button, Empty, Spin, Typography } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import { Conversations } from '@ant-design/x';
-import { catalogStore } from '../../stores';
+import { useShallow } from 'zustand/react/shallow';
+import { useCatalogStore } from '../../stores';
 
-export const SessionsView = observer(function SessionsView() {
-  const c = catalogStore;
+export function SessionsView() {
+  const c = useCatalogStore(
+    useShallow((s) => ({
+      sessions: s.sessions,
+      sessionsLoading: s.sessionsLoading,
+      sessionsError: s.sessionsError,
+    })),
+  );
+  const loadSessions = useCatalogStore((s) => s.loadSessions);
   const items = c.sessions.map((s) => ({
     key: s.id,
     label: s.title || s.id,
@@ -21,7 +28,7 @@ export const SessionsView = observer(function SessionsView() {
         <Button
           size="small"
           icon={<ReloadOutlined />}
-          onClick={c.loadSessions}
+          onClick={loadSessions}
           loading={c.sessionsLoading}
         >
           Refresh
@@ -43,7 +50,7 @@ export const SessionsView = observer(function SessionsView() {
       )}
     </div>
   );
-});
+}
 
 function timeLabel(t: string | number | undefined): string {
   if (t == null) return 'Earlier';

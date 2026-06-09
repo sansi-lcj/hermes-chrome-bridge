@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.4.0
+
+Migrated state management from **MobX to Zustand**.
+
+### Changed
+
+- `src/stores/` are now Zustand stores (`settings`, `ui`, `catalog`, `chat`,
+  `settingsForm`). Components read state with selector hooks
+  (`useChatStore((s) => …)`) instead of `observer()`; removed `mobx` and
+  `mobx-react-lite`.
+- The chat store keeps the Port / streaming machinery as module functions and
+  drives the store via `getState()/setState()`; updates are immutable.
+- Cross-store reactions (settings → model reload, tab → catalog load,
+  conversation persistence) are wired once in `stores/index.ts` with
+  `store.subscribe(...)`; `initStores()` performs the initial load and Port
+  connect. `ChatStore` tests ported to the Zustand store; E2E unchanged and green.
+
 ## 1.3.1
 
 End-to-end tests — which immediately caught a real regression.
