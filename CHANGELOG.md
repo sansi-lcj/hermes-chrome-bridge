@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.6.0
+
+Page **perception + DOM actions** — the agent can now operate the page, with
+confirmation-gated writes. A real agentic-browser step.
+
+### Added
+
+- **Perception**: `get_page_elements` indexes the active page's interactive
+  elements (links/buttons/inputs) via the content script (`src/lib/dom.ts`).
+- **Actions**: `click_element`, `type_text`, `scroll_page`, `navigate_to` — the
+  agent references elements by index and the content script performs the action.
+- **Confirmation gating**: write/action tools (`click`, `type`, `navigate`,
+  `open_url`) prompt for **Allow/Deny** before running; an **Auto-run** toggle
+  skips prompts for power users. `createGuardedRunner` + a confirm round-trip
+  over the Port; the UI shows an inline approval card.
+- Tests: jsdom element-collection, tool relays, the confirmation guard, the
+  store confirm round-trip, and an **E2E** that approves a write tool. 67 unit +
+  4 E2E.
+
 ## 1.5.0
 
 Agent **browser tools** — the Hermes Agent can now use Chrome's capabilities.

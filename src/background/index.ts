@@ -12,7 +12,7 @@ import { HermesClient, HermesError } from '../lib/hermesClient';
 import { setPendingPrompt } from '../lib/pending';
 import { addRun, listRuns, removeRun } from '../lib/runRegistry';
 import { getSettings } from '../lib/storage';
-import { runTool, toolSpecs } from '../lib/tools';
+import { createGuardedRunner, runTool, toolSpecs } from '../lib/tools';
 import type {
   ApiRequest,
   ApiResponse,
@@ -69,6 +69,30 @@ interface ActiveStream {
   isRun: boolean;
 }
 
+// Pending tool-confirmation prompts, keyed by confirmId, awaiting the UI's answer.
+const pendingConfirms = new Map<string, (approved: boolean) => void>();
+let confirmCounter = 0;
+
+/** Ask the UI to approve a write tool; resolves false on decline/timeout/closed panel. */
+function requestConfirm(
+  channel: Channel,
+  requestId: string,
+  tool: string,
+  args: string,
+): Promise<boolean> {
+  if (!channel.alive) return Promise.resolve(false);
+  const confirmId = `cf-${Date.now()}-${confirmCounter++}`;
+  return new Promise((resolve) => {
+    const done = (approved: boolean) => {
+      pendingConfirms.delete(confirmId);
+      resolve(approved);
+    };
+    pendingConfirms.set(confirmId, done);
+    channel.post({ type: 'confirm', requestId, confirmId, tool, args });
+    setTimeout(() => pendingConfirms.has(confirmId) && done(false), 120_000);
+  });
+}
+
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== PORT_NAME) return;
 
@@ -88,6 +112,10 @@ chrome.runtime.onConnect.addListener((port) => {
   port.onMessage.addListener((msg: UiToBackground) => {
     if (msg.type === 'cancel') {
       active.get(msg.requestId)?.controller.abort();
+      return;
+    }
+    if (msg.type === 'confirm.result') {
+      pendingConfirms.get(msg.confirmId)?.(msg.approved);
       return;
     }
     if (msg.type === 'chat.start') {
@@ -111,15 +139,20 @@ async function runStream(
   controller: AbortController,
   channel: Channel,
 ): Promise<void> {
-  const { requestId, messages, model, useRun, useTools } = req;
+  const { requestId, messages, model, useRun, useTools, autoApprove } = req;
   const hermes = await client();
   try {
     if (useTools) {
+      const guardedRun = createGuardedRunner(
+        runTool,
+        (tool, args) => requestConfirm(channel, requestId, tool, args),
+        autoApprove,
+      );
       for await (const ev of hermes.runToolLoop(
         messages,
         model,
         toolSpecs(),
-        runTool,
+        guardedRun,
         controller.signal,
       )) {
         if (ev.kind === 'tool-call')

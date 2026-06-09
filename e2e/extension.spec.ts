@@ -52,6 +52,26 @@ test('agent tools: the agent calls a browser tool, then answers', async ({ page,
   await expect(page.getByText(/list_tabs/).first()).toBeVisible();
 });
 
+test('write tools ask for confirmation before running', async ({ page, extensionId }) => {
+  await page.goto(`chrome-extension://${extensionId}/src/sidepanel/index.html`);
+  await page.getByPlaceholder('http://127.0.0.1:8642').fill(server.url);
+  await page.getByPlaceholder('API_SERVER_KEY').fill('test-key');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText('Saved.')).toBeVisible();
+
+  await page.getByLabel('segmented control').getByText('Chat').click();
+  await page.getByLabel('Agent tools').click(); // tools on; Ask mode by default
+
+  const composer = page.getByPlaceholder(/Message the agent/);
+  await composer.fill('please run an action');
+  await composer.press('Enter');
+
+  // A confirmation prompt appears for the write tool; approving runs it.
+  await expect(page.getByText('open_url')).toBeVisible();
+  await page.getByRole('button', { name: 'Allow' }).click();
+  await expect(page.getByText('Tools done')).toBeVisible();
+});
+
 test('Test connection reports the mock models', async ({ page, extensionId }) => {
   await page.goto(`chrome-extension://${extensionId}/src/sidepanel/index.html`);
   await page.getByPlaceholder('http://127.0.0.1:8642').fill(server.url);

@@ -164,6 +164,8 @@ export interface ChatStartRequest {
   useRun: boolean;
   /** When true, let the agent call browser tools (tool-use loop). */
   useTools: boolean;
+  /** When true, run write/action tools without asking for confirmation. */
+  autoApprove: boolean;
 }
 
 export interface CancelRequest {
@@ -171,7 +173,14 @@ export interface CancelRequest {
   requestId: string;
 }
 
-export type UiToBackground = ChatStartRequest | CancelRequest;
+/** UI's answer to a tool-confirmation prompt. */
+export interface ConfirmResultRequest {
+  type: 'confirm.result';
+  confirmId: string;
+  approved: boolean;
+}
+
+export type UiToBackground = ChatStartRequest | CancelRequest | ConfirmResultRequest;
 
 // ---------------------------------------------------------------------------
 // Port message protocol: background -> UI
@@ -200,11 +209,21 @@ export interface ErrorMessage {
   message: string;
 }
 
+/** Ask the UI to approve a write/action tool before it runs. */
+export interface ConfirmMessage {
+  type: 'confirm';
+  requestId: string;
+  confirmId: string;
+  tool: string;
+  args: string;
+}
+
 export type BackgroundToUi =
   | ChatDeltaMessage
   | ToolProgressMessage
   | ChatDoneMessage
-  | ErrorMessage;
+  | ErrorMessage
+  | ConfirmMessage;
 
 // ---------------------------------------------------------------------------
 // One-off runtime messages (request/response via chrome.runtime.sendMessage)

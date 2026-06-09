@@ -33,8 +33,12 @@ interface ChatState {
   streaming: boolean;
   onDevice: boolean;
   onDeviceSupported: boolean;
-  /** Let the agent call browser tools (list tabs, read page, open url). */
+  /** Let the agent call browser tools (list tabs, read page, click, type, …). */
   agentTools: boolean;
+  /** Run write/action tools without asking each time. */
+  autoApproveActions: boolean;
+  /** A pending write-tool confirmation awaiting the user's decision. */
+  pendingConfirm: { confirmId: string; tool: string; args: string } | null;
 
   setInput: (v: string) => void;
   setMode: (mode: ChatMode) => void;
@@ -42,6 +46,8 @@ interface ChatState {
   setAttachContext: (v: boolean) => void;
   setOnDevice: (v: boolean) => void;
   setAgentTools: (v: boolean) => void;
+  setAutoApprove: (v: boolean) => void;
+  resolveConfirm: (approved: boolean) => void;
   sendMessage: (text: string) => void;
   stop: () => void;
   newChat: () => void;
@@ -59,6 +65,8 @@ export const useChatStore = create<ChatState>()(
     onDevice: false,
     onDeviceSupported: false,
     agentTools: false,
+    autoApproveActions: false,
+    pendingConfirm: null,
 
     setInput: (input) => set({ input }),
     setMode: (mode) => set({ mode }),
@@ -66,6 +74,13 @@ export const useChatStore = create<ChatState>()(
     setAttachContext: (attachContext) => set({ attachContext }),
     setOnDevice: (onDevice) => set({ onDevice }),
     setAgentTools: (agentTools) => set({ agentTools }),
+    setAutoApprove: (autoApproveActions) => set({ autoApproveActions }),
+    resolveConfirm: (approved) => {
+      const pc = get().pendingConfirm;
+      if (!pc) return;
+      sendPort({ type: 'confirm.result', confirmId: pc.confirmId, approved });
+      set({ pendingConfirm: null });
+    },
 
     sendMessage: (text) => {
       const trimmed = text.trim();
@@ -87,7 +102,7 @@ export const useChatStore = create<ChatState>()(
 
     newChat: () => {
       if (get().streaming) get().stop();
-      set({ messages: [] });
+      set({ messages: [], pendingConfirm: null });
       void clearConversation();
     },
   })),
@@ -104,7 +119,7 @@ function dispatch(content: string): void {
     { role: 'user', content },
     { role: 'assistant', content: '', tools: [] },
   ];
-  useChatStore.setState({ messages, input: '', streaming: true });
+  useChatStore.setState({ messages, input: '', streaming: true, pendingConfirm: null });
 
   // On-device answering applies only when tools aren't requested.
   if (s.onDevice && s.onDeviceSupported && !s.agentTools) {
@@ -120,6 +135,7 @@ function dispatch(content: string): void {
     model: s.model,
     useRun: s.mode === 'run',
     useTools: s.agentTools,
+    autoApprove: s.autoApproveActions,
     messages: messages
       .filter((m) => m.role !== 'assistant' || m.content.length > 0)
       .map((m) => ({ role: m.role, content: m.content })),
@@ -135,6 +151,12 @@ function patchLastAssistant(fn: (last: StoredMessage) => StoredMessage): void {
 
 export function onPortMessage(msg: BackgroundToUi): void {
   if (msg.requestId !== activeReq) return;
+  if (msg.type === 'confirm') {
+    useChatStore.setState({
+      pendingConfirm: { confirmId: msg.confirmId, tool: msg.tool, args: msg.args },
+    });
+    return;
+  }
   if (msg.type === 'chat.delta')
     patchLastAssistant((last) => ({ ...last, content: last.content + msg.content }));
   else if (msg.type === 'chat.tool')
@@ -146,7 +168,7 @@ export function onPortMessage(msg: BackgroundToUi): void {
     patchLastAssistant((last) => ({ ...last, content: last.content + `\n\n> ⚠️ ${msg.message}` }));
 
   if (msg.type === 'chat.done' || msg.type === 'error') {
-    useChatStore.setState({ streaming: false });
+    useChatStore.setState({ streaming: false, pendingConfirm: null });
     activeReq = null;
   }
 }
