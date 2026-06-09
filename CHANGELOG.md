@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.4.0
+
+Migrated state management from **MobX to Zustand**.
+
+### Changed
+
+- `src/stores/` are now Zustand stores (`settings`, `ui`, `catalog`, `chat`,
+  `settingsForm`). Components read state with selector hooks
+  (`useChatStore((s) => …)`) instead of `observer()`; removed `mobx` and
+  `mobx-react-lite`.
+- The chat store keeps the Port / streaming machinery as module functions and
+  drives the store via `getState()/setState()`; updates are immutable.
+- Cross-store reactions (settings → model reload, tab → catalog load,
+  conversation persistence) are wired once in `stores/index.ts` with
+  `store.subscribe(...)`; `initStores()` performs the initial load and Port
+  connect. `ChatStore` tests ported to the Zustand store; E2E unchanged and green.
+
+## 1.3.1
+
+End-to-end tests — which immediately caught a real regression.
+
+### Fixed
+
+- **Chat composer crashed on input.** `ChatStore`'s action methods were
+  explicitly annotated `action` with `makeObservable`'s `autoBind`, which does
+  **not** bind explicitly-annotated members — so `onChange={s.setInput}` ran with
+  `this === undefined` and threw. Methods are now `action.bound`.
+
+### Added
+
+- **Playwright end-to-end tests** that load the unpacked extension in headless
+  Chromium (`--headless=new`), drive Settings → save → chat, and assert the SSE
+  answer renders — reusing the mock Hermes server. New `e2e/` suite, an E2E build
+  mode (`build:e2e`, statically grants the loopback origin), and an **E2E CI
+  workflow**.
+
 ## 1.3.0
 
 Best-practices pass across the audit items.

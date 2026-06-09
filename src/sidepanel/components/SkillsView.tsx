@@ -1,9 +1,16 @@
-import { observer } from 'mobx-react-lite';
 import { Alert, Card, Empty, List, Spin, Tag, Typography } from 'antd';
-import { catalogStore } from '../../stores';
+import { useShallow } from 'zustand/react/shallow';
+import { useCatalogStore } from '../../stores';
 
-export const SkillsView = observer(function SkillsView() {
-  const c = catalogStore;
+export function SkillsView() {
+  const c = useCatalogStore(
+    useShallow((s) => ({
+      skills: s.skills,
+      toolsets: s.toolsets,
+      skillsLoading: s.skillsLoading,
+      skillsError: s.skillsError,
+    })),
+  );
 
   if (c.skillsLoading)
     return (
@@ -52,4 +59,4 @@ export const SkillsView = observer(function SkillsView() {
       )}
     </div>
   );
-});
+}

@@ -61,4 +61,7 @@ export default defineManifest({
   // The configured Hermes origin is requested at runtime (on Settings save) via
   // chrome.permissions.request so the service worker can call it without CORS.
   optional_host_permissions: ['http://*/*', 'https://*/*'],
+  // E2E builds statically grant the loopback mock server so Playwright can drive
+  // the Save/permission flow without an un-clickable permission prompt.
+  ...(process.env.E2E ? { host_permissions: ['http://127.0.0.1/*', 'http://localhost/*'] } : {}),
 });

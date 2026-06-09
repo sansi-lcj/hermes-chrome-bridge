@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SettingsStore } from './SettingsStore';
 
 // Capture what the store posts over the (faked) Port.
 const sent: Array<Record<string, unknown>> = [];
@@ -26,23 +25,33 @@ vi.stubGlobal('chrome', {
       set: vi.fn(async () => {}),
       remove: vi.fn(async () => {}),
     },
+    onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
   },
 });
 
-const { ChatStore } = await import('./ChatStore');
+const { useChatStore, onPortMessage } = await import('./chat');
 
-const stubSettings = { baseUrl: '', apiKey: '', defaultModel: 'm', mode: 'chat' } as SettingsStore;
-const newStore = () => new ChatStore(stubSettings);
 const startId = () => (sent.find((m) => m.type === 'chat.start')?.requestId as string) ?? '';
 
-describe('ChatStore', () => {
+describe('chat store', () => {
   beforeEach(() => {
     sent.length = 0;
+    useChatStore.setState({
+      messages: [],
+      input: '',
+      streaming: false,
+      models: [],
+      attachContext: false,
+      onDevice: false,
+      onDeviceSupported: false,
+      mode: 'chat',
+      model: 'hermes',
+    });
   });
 
   it('creates a user + assistant turn and starts streaming', () => {
-    const s = newStore();
-    s.sendMessage('hello');
+    useChatStore.getState().sendMessage('hello');
+    const s = useChatStore.getState();
     expect(s.messages.map((m) => m.role)).toEqual(['user', 'assistant']);
     expect(s.messages[0].content).toBe('hello');
     expect(s.streaming).toBe(true);
@@ -50,35 +59,31 @@ describe('ChatStore', () => {
   });
 
   it('applies streamed deltas in order and completes', () => {
-    const s = newStore();
-    s.sendMessage('hi');
+    useChatStore.getState().sendMessage('hi');
     const id = startId();
-    s.onPortMessage({ type: 'chat.delta', requestId: id, content: 'wor' });
-    s.onPortMessage({ type: 'chat.delta', requestId: id, content: 'ld' });
-    expect(s.messages[1].content).toBe('world');
-    s.onPortMessage({ type: 'chat.done', requestId: id });
-    expect(s.streaming).toBe(false);
+    onPortMessage({ type: 'chat.delta', requestId: id, content: 'wor' });
+    onPortMessage({ type: 'chat.delta', requestId: id, content: 'ld' });
+    expect(useChatStore.getState().messages[1].content).toBe('world');
+    onPortMessage({ type: 'chat.done', requestId: id });
+    expect(useChatStore.getState().streaming).toBe(false);
   });
 
   it('ignores deltas for a stale request id', () => {
-    const s = newStore();
-    s.sendMessage('hi');
-    s.onPortMessage({ type: 'chat.delta', requestId: 'stale', content: 'X' });
-    expect(s.messages[1].content).toBe('');
+    useChatStore.getState().sendMessage('hi');
+    onPortMessage({ type: 'chat.delta', requestId: 'stale', content: 'X' });
+    expect(useChatStore.getState().messages[1].content).toBe('');
   });
 
   it('does not send while already streaming', () => {
-    const s = newStore();
-    s.sendMessage('first');
-    s.sendMessage('second');
+    useChatStore.getState().sendMessage('first');
+    useChatStore.getState().sendMessage('second');
     expect(sent.filter((m) => m.type === 'chat.start')).toHaveLength(1);
   });
 
   it('newChat clears the conversation and stops streaming', () => {
-    const s = newStore();
-    s.sendMessage('hi');
-    s.newChat();
-    expect(s.messages).toEqual([]);
-    expect(s.streaming).toBe(false);
+    useChatStore.getState().sendMessage('hi');
+    useChatStore.getState().newChat();
+    expect(useChatStore.getState().messages).toEqual([]);
+    expect(useChatStore.getState().streaming).toBe(false);
   });
 });

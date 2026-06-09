@@ -1,34 +1,73 @@
-// Singleton store instances + cross-store reactions.
-//
-// Created once at module load (outside React), so there is no Provider/Context
-// and components import these directly — no hooks needed to reach state.
+// Zustand stores + one-time side-effect wiring. Components import the hooks
+// from here; `initStores()` (called once from main) loads settings, connects
+// the Port, and sets up cross-store subscriptions.
 
-import { reaction } from 'mobx';
-import { SettingsStore } from './SettingsStore';
-import { UiStore } from './UiStore';
-import { CatalogStore } from './CatalogStore';
-import { ChatStore } from './ChatStore';
-import { SettingsFormStore } from './SettingsFormStore';
+import { shallow } from 'zustand/shallow';
+import { saveConversation } from '../lib/conversation';
+import { onSettingsChanged } from '../lib/storage';
+import { initChat, loadModels, useChatStore } from './chat';
+import { useCatalogStore } from './catalog';
+import { isConfigured, useSettingsStore } from './settings';
+import { useSettingsFormStore } from './settingsForm';
+import { useUiStore } from './ui';
 
-export const settingsStore = new SettingsStore();
-export const uiStore = new UiStore();
-export const catalogStore = new CatalogStore();
-export const chatStore = new ChatStore(settingsStore);
-export const settingsForm = new SettingsFormStore(settingsStore);
+export { useChatStore } from './chat';
+export { useCatalogStore } from './catalog';
+export { useSettingsStore } from './settings';
+export { useSettingsFormStore } from './settingsForm';
+export { useUiStore } from './ui';
+export type { Tab } from './ui';
 
-// Lazily load catalog data the first time the user opens those tabs.
-reaction(
-  () => uiStore.tab,
-  (tab) => {
-    if (tab === 'skills' && !catalogStore.skillsLoaded) void catalogStore.loadSkills();
-    if (tab === 'sessions' && !catalogStore.sessionsLoaded) void catalogStore.loadSessions();
-  },
-);
+let initialized = false;
 
-// Route a first-time / unconfigured user to Settings once settings have loaded.
-reaction(
-  () => settingsStore.loaded,
-  (loaded) => {
-    if (loaded && !settingsStore.configured) uiStore.setTab('settings');
-  },
-);
+export function initStores(): void {
+  if (initialized) return;
+  initialized = true;
+
+  // Mirror external storage changes into the settings store.
+  onSettingsChanged((s) => useSettingsStore.setState({ ...s }));
+
+  // Keep chat defaults in sync with settings; reload models when the server changes.
+  useSettingsStore.subscribe(
+    (s) => [s.defaultModel, s.mode] as const,
+    ([defaultModel, mode]) => useChatStore.setState({ model: defaultModel, mode }),
+    { equalityFn: shallow },
+  );
+  useSettingsStore.subscribe(
+    (s) => [s.baseUrl, s.apiKey] as const,
+    () => void loadModels(),
+    { equalityFn: shallow, fireImmediately: true },
+  );
+
+  // Seed the settings-form draft and route unconfigured users to Settings.
+  useSettingsStore.subscribe(
+    (s) => s.loaded,
+    (loaded) => {
+      if (!loaded) return;
+      useSettingsFormStore.getState().reset();
+      if (!isConfigured()) useUiStore.getState().setTab('settings');
+    },
+  );
+
+  // Lazily load catalog data the first time those tabs are opened.
+  useUiStore.subscribe(
+    (s) => s.tab,
+    (tab) => {
+      const c = useCatalogStore.getState();
+      if (tab === 'skills' && !c.skillsLoaded) void c.loadSkills();
+      if (tab === 'sessions' && !c.sessionsLoaded) void c.loadSessions();
+    },
+  );
+
+  // Persist whenever a turn completes (skip mid-stream churn).
+  useChatStore.subscribe(
+    (s) => ({ streaming: s.streaming, messages: s.messages }),
+    ({ streaming, messages }) => {
+      if (!streaming && messages.length > 0) void saveConversation(messages);
+    },
+    { equalityFn: shallow },
+  );
+
+  initChat();
+  void useSettingsStore.getState().load();
+}
