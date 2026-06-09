@@ -32,6 +32,8 @@ export function ChatView() {
   const onDevice = useChatStore((s) => s.onDevice);
   const onDeviceSupported = useChatStore((s) => s.onDeviceSupported);
   const agentTools = useChatStore((s) => s.agentTools);
+  const autoApprove = useChatStore((s) => s.autoApproveActions);
+  const pendingConfirm = useChatStore((s) => s.pendingConfirm);
 
   const setInput = useChatStore((s) => s.setInput);
   const setModel = useChatStore((s) => s.setModel);
@@ -39,6 +41,8 @@ export function ChatView() {
   const setAttachContext = useChatStore((s) => s.setAttachContext);
   const setOnDevice = useChatStore((s) => s.setOnDevice);
   const setAgentTools = useChatStore((s) => s.setAgentTools);
+  const setAutoApprove = useChatStore((s) => s.setAutoApprove);
+  const resolveConfirm = useChatStore((s) => s.resolveConfirm);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const stop = useChatStore((s) => s.stop);
   const newChat = useChatStore((s) => s.newChat);
@@ -98,7 +102,7 @@ export function ChatView() {
             unCheckedChildren={<FileTextOutlined />}
           />
         </Tooltip>
-        <Tooltip title="Let the agent use browser tools (list tabs, read page, open URL)">
+        <Tooltip title="Let the agent use browser tools (read page, list tabs, click, type, navigate)">
           <Switch
             size="small"
             aria-label="Agent tools"
@@ -108,6 +112,18 @@ export function ChatView() {
             unCheckedChildren={<ToolOutlined />}
           />
         </Tooltip>
+        {agentTools && (
+          <Tooltip title="Run actions (click, type, navigate) without confirming each one">
+            <Switch
+              size="small"
+              aria-label="Auto-run actions"
+              checked={autoApprove}
+              onChange={setAutoApprove}
+              checkedChildren="Auto"
+              unCheckedChildren="Ask"
+            />
+          </Tooltip>
+        )}
         {onDeviceSupported && (
           <Tooltip title="Answer on-device with Chrome's built-in AI (private, no network)">
             <Switch
@@ -143,6 +159,23 @@ export function ChatView() {
           <Bubble.List autoScroll role={ROLE} items={items} />
         )}
       </div>
+
+      {pendingConfirm && (
+        <div className="confirm-card">
+          <div className="confirm-text">
+            Allow <b>{pendingConfirm.tool}</b>
+            <span className="confirm-args">{pendingConfirm.args}</span>?
+          </div>
+          <div className="confirm-actions">
+            <Button size="small" onClick={() => resolveConfirm(false)}>
+              Deny
+            </Button>
+            <Button size="small" type="primary" onClick={() => resolveConfirm(true)}>
+              Allow
+            </Button>
+          </div>
+        </div>
+      )}
 
       <div className="composer">
         <Sender

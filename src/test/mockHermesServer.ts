@@ -33,7 +33,7 @@ function readBody(req: http.IncomingMessage): Promise<string> {
 
 interface ChatBody {
   stream?: boolean;
-  messages?: Array<{ role?: string }>;
+  messages?: Array<{ role?: string; content?: string }>;
 }
 
 function chatCompletions(res: http.ServerResponse, body: string): void {
@@ -42,8 +42,8 @@ function chatCompletions(res: http.ServerResponse, body: string): void {
   // Non-streaming tool loop: first ask -> request a tool; once a tool result is
   // present in the transcript -> return a final answer.
   if (parsed.stream === false) {
-    const usedTool = (parsed.messages ?? []).some((m) => m.role === 'tool');
-    if (usedTool) {
+    const msgs = parsed.messages ?? [];
+    if (msgs.some((m) => m.role === 'tool')) {
       return json(res, {
         choices: [
           {
@@ -54,6 +54,13 @@ function chatCompletions(res: http.ServerResponse, body: string): void {
         ],
       });
     }
+    // A message mentioning "action" exercises a write tool (needs confirmation).
+    const wantsAction = msgs.some(
+      (m) => m.role === 'user' && typeof m.content === 'string' && m.content.includes('action'),
+    );
+    const fn = wantsAction
+      ? { name: 'open_url', arguments: JSON.stringify({ url: 'https://example.com/' }) }
+      : { name: 'list_tabs', arguments: '{}' };
     return json(res, {
       choices: [
         {
@@ -61,9 +68,7 @@ function chatCompletions(res: http.ServerResponse, body: string): void {
           message: {
             role: 'assistant',
             content: '',
-            tool_calls: [
-              { id: 'call_1', type: 'function', function: { name: 'list_tabs', arguments: '{}' } },
-            ],
+            tool_calls: [{ id: 'call_1', type: 'function', function: fn }],
           },
           finish_reason: 'tool_calls',
         },

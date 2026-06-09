@@ -12,7 +12,7 @@ The UI is built on **[Ant Design X](https://x.ant.design/)** — Ant Design's co
 - **Conversation persistence** — your chat survives closing the panel; start fresh with **New chat**.
 - **Page context** — attach the current tab's selection or readable text to your message.
 - **Runs mode** — drive long, autonomous tasks via the `/v1/runs` API. Runs keep going even if you close the panel and notify you when finished.
-- **Agent tools** — toggle **Tools** to let the agent use your browser: it can call `list_tabs`, `read_active_page`, and `open_url` via function calling, with each tool step shown in the message's tool trail. Uses already-granted permissions only.
+- **Agent tools** — toggle **Tools** to let the agent operate your browser via function calling: **perceive** the page (`get_page_elements`, `read_active_page`, `list_tabs`) and **act** on it (`click_element`, `type_text`, `scroll_page`, `navigate_to`, `open_url`). Each tool step shows in the tool trail. Write/action tools prompt for **Allow/Deny** by default (an **Auto-run** toggle skips prompts). Uses already-granted permissions only.
 - **Skills & Sessions** — browse `/v1/skills`, `/v1/toolsets`, and `/api/sessions`.
 - **Settings** — configure base URL, bearer key, default model/mode; one-click connection test.
 

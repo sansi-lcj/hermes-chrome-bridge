@@ -86,4 +86,26 @@ describe('chat store', () => {
     expect(useChatStore.getState().messages).toEqual([]);
     expect(useChatStore.getState().streaming).toBe(false);
   });
+
+  it('surfaces a tool confirmation and reports the decision', () => {
+    useChatStore.getState().sendMessage('do something');
+    const id = startId();
+    onPortMessage({
+      type: 'confirm',
+      requestId: id,
+      confirmId: 'c1',
+      tool: 'open_url',
+      args: '{}',
+    });
+    expect(useChatStore.getState().pendingConfirm).toEqual({
+      confirmId: 'c1',
+      tool: 'open_url',
+      args: '{}',
+    });
+    useChatStore.getState().resolveConfirm(true);
+    expect(useChatStore.getState().pendingConfirm).toBeNull();
+    expect(
+      sent.some((m) => m.type === 'confirm.result' && m.confirmId === 'c1' && m.approved === true),
+    ).toBe(true);
+  });
 });
