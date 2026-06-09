@@ -33,12 +33,15 @@ interface ChatState {
   streaming: boolean;
   onDevice: boolean;
   onDeviceSupported: boolean;
+  /** Let the agent call browser tools (list tabs, read page, open url). */
+  agentTools: boolean;
 
   setInput: (v: string) => void;
   setMode: (mode: ChatMode) => void;
   setModel: (model: string) => void;
   setAttachContext: (v: boolean) => void;
   setOnDevice: (v: boolean) => void;
+  setAgentTools: (v: boolean) => void;
   sendMessage: (text: string) => void;
   stop: () => void;
   newChat: () => void;
@@ -55,12 +58,14 @@ export const useChatStore = create<ChatState>()(
     streaming: false,
     onDevice: false,
     onDeviceSupported: false,
+    agentTools: false,
 
     setInput: (input) => set({ input }),
     setMode: (mode) => set({ mode }),
     setModel: (model) => set({ model }),
     setAttachContext: (attachContext) => set({ attachContext }),
     setOnDevice: (onDevice) => set({ onDevice }),
+    setAgentTools: (agentTools) => set({ agentTools }),
 
     sendMessage: (text) => {
       const trimmed = text.trim();
@@ -101,7 +106,8 @@ function dispatch(content: string): void {
   ];
   useChatStore.setState({ messages, input: '', streaming: true });
 
-  if (s.onDevice && s.onDeviceSupported) {
+  // On-device answering applies only when tools aren't requested.
+  if (s.onDevice && s.onDeviceSupported && !s.agentTools) {
     void runOnDevice(++odToken);
     return;
   }
@@ -113,6 +119,7 @@ function dispatch(content: string): void {
     requestId,
     model: s.model,
     useRun: s.mode === 'run',
+    useTools: s.agentTools,
     messages: messages
       .filter((m) => m.role !== 'assistant' || m.content.length > 0)
       .map((m) => ({ role: m.role, content: m.content })),

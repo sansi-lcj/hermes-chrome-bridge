@@ -1,5 +1,5 @@
 import { Button, Select, Switch, Tooltip } from 'antd';
-import { EditOutlined, FileTextOutlined, RobotOutlined } from '@ant-design/icons';
+import { EditOutlined, FileTextOutlined, RobotOutlined, ToolOutlined } from '@ant-design/icons';
 import { Bubble, Prompts, Sender, ThoughtChain, Welcome } from '@ant-design/x';
 import type { BubbleItemType, BubbleListProps } from '@ant-design/x';
 import { useChatStore } from '../../stores';
@@ -31,12 +31,14 @@ export function ChatView() {
   const attachContext = useChatStore((s) => s.attachContext);
   const onDevice = useChatStore((s) => s.onDevice);
   const onDeviceSupported = useChatStore((s) => s.onDeviceSupported);
+  const agentTools = useChatStore((s) => s.agentTools);
 
   const setInput = useChatStore((s) => s.setInput);
   const setModel = useChatStore((s) => s.setModel);
   const setMode = useChatStore((s) => s.setMode);
   const setAttachContext = useChatStore((s) => s.setAttachContext);
   const setOnDevice = useChatStore((s) => s.setOnDevice);
+  const setAgentTools = useChatStore((s) => s.setAgentTools);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const stop = useChatStore((s) => s.stop);
   const newChat = useChatStore((s) => s.newChat);
@@ -94,6 +96,16 @@ export function ChatView() {
             onChange={setAttachContext}
             checkedChildren={<FileTextOutlined />}
             unCheckedChildren={<FileTextOutlined />}
+          />
+        </Tooltip>
+        <Tooltip title="Let the agent use browser tools (list tabs, read page, open URL)">
+          <Switch
+            size="small"
+            aria-label="Agent tools"
+            checked={agentTools}
+            onChange={setAgentTools}
+            checkedChildren="Tools"
+            unCheckedChildren={<ToolOutlined />}
           />
         </Tooltip>
         {onDeviceSupported && (

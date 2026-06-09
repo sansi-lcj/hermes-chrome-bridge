@@ -6,6 +6,7 @@
 
 import type {
   ChatCompletionChunk,
+  ChatCompletionResponse,
   ChatMessage,
   ModelInfo,
   ModelsResponse,
@@ -15,8 +16,20 @@ import type {
   Settings,
   Skill,
   ToolProgressEvent,
+  ToolSpec,
   Toolset,
 } from './types';
+
+/** Cap tool-use rounds so a misbehaving agent can't loop forever. */
+export const MAX_TOOL_ROUNDS = 6;
+
+/** Executes a named tool and returns its result string. */
+export type ToolRunner = (name: string, args: string) => Promise<string>;
+
+export type ToolLoopEvent =
+  | { kind: 'tool-call'; name: string; args: string }
+  | { kind: 'tool-result'; name: string }
+  | { kind: 'final'; content: string };
 
 export class HermesError extends Error {
   constructor(
@@ -153,6 +166,60 @@ export class HermesClient {
       if (delta) yield { kind: 'delta', content: delta };
     }
     yield { kind: 'done' };
+  }
+
+  // ----- Tool-use loop (agent calls browser tools) -------------------------
+
+  /** One non-streaming completion, optionally advertising tools. */
+  async chatCompletion(
+    messages: ChatMessage[],
+    model: string,
+    tools: ToolSpec[] | undefined,
+    signal: AbortSignal,
+  ): Promise<ChatCompletionResponse> {
+    const res = await fetch(`${this.baseUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: this.headers({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ model, messages, tools, stream: false }),
+      signal,
+    });
+    if (!res.ok) throw new HermesError(await this.describeError(res), res.status);
+    return (await res.json()) as ChatCompletionResponse;
+  }
+
+  /**
+   * Drive a tool-use conversation: ask the model, run any tools it requests via
+   * `runTool`, feed results back, and repeat until it answers (or the round cap).
+   */
+  async *runToolLoop(
+    messages: ChatMessage[],
+    model: string,
+    tools: ToolSpec[],
+    runTool: ToolRunner,
+    signal: AbortSignal,
+  ): AsyncGenerator<ToolLoopEvent> {
+    const convo: ChatMessage[] = [...messages];
+    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      const res = await this.chatCompletion(convo, model, tools, signal);
+      const msg = res.choices?.[0]?.message;
+      if (!msg) {
+        yield { kind: 'final', content: '' };
+        return;
+      }
+      if (msg.tool_calls?.length) {
+        convo.push({ role: 'assistant', content: msg.content ?? '', tool_calls: msg.tool_calls });
+        for (const tc of msg.tool_calls) {
+          yield { kind: 'tool-call', name: tc.function.name, args: tc.function.arguments };
+          const result = await runTool(tc.function.name, tc.function.arguments);
+          convo.push({ role: 'tool', tool_call_id: tc.id, content: result });
+          yield { kind: 'tool-result', name: tc.function.name };
+        }
+        continue;
+      }
+      yield { kind: 'final', content: msg.content ?? '' };
+      return;
+    }
+    yield { kind: 'final', content: '(Stopped after too many tool rounds.)' };
   }
 
   // ----- Runs API (long tasks) ---------------------------------------------

@@ -34,15 +34,40 @@ export const DEFAULT_SETTINGS: Settings = {
 
 export type ChatRole = 'system' | 'user' | 'assistant' | 'tool';
 
+export interface ToolCall {
+  id: string;
+  type: 'function';
+  function: { name: string; arguments: string };
+}
+
 export interface ChatMessage {
   role: ChatRole;
   content: string;
+  /** Present on assistant turns that request tools. */
+  tool_calls?: ToolCall[];
+  /** Links a tool result back to the assistant's tool call. */
+  tool_call_id?: string;
+}
+
+/** OpenAI "function" tool spec advertised to the model. */
+export interface ToolSpec {
+  type: 'function';
+  function: { name: string; description: string; parameters: Record<string, unknown> };
 }
 
 export interface ChatCompletionRequest {
   model: string;
   messages: ChatMessage[];
   stream?: boolean;
+  tools?: ToolSpec[];
+}
+
+export interface ChatCompletionResponse {
+  choices: Array<{
+    index: number;
+    message: { role: ChatRole; content: string | null; tool_calls?: ToolCall[] };
+    finish_reason: string | null;
+  }>;
 }
 
 export interface ChatCompletionChunk {
@@ -137,6 +162,8 @@ export interface ChatStartRequest {
   model: string;
   /** When true, run via the Runs API instead of chat completions. */
   useRun: boolean;
+  /** When true, let the agent call browser tools (tool-use loop). */
+  useTools: boolean;
 }
 
 export interface CancelRequest {
