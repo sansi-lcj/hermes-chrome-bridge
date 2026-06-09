@@ -1,5 +1,4 @@
 import { lazy, Suspense } from 'react';
-import { observer } from 'mobx-react-lite';
 import { Segmented, Spin } from 'antd';
 import {
   MessageOutlined,
@@ -7,8 +6,7 @@ import {
   HistoryOutlined,
   SettingOutlined,
 } from '@ant-design/icons';
-import { settingsStore, uiStore } from '../stores';
-import type { Tab } from '../stores/UiStore';
+import { useSettingsStore, useUiStore, type Tab } from '../stores';
 import { ChatView } from './components/ChatView';
 
 // Code-split the secondary views so they load only when opened.
@@ -28,17 +26,20 @@ const Loading = (
   </div>
 );
 
-export const App = observer(function App() {
-  if (!settingsStore.loaded) return <div className="loading">Loading…</div>;
+export function App() {
+  const loaded = useSettingsStore((s) => s.loaded);
+  const tab = useUiStore((s) => s.tab);
+  const setTab = useUiStore((s) => s.setTab);
 
-  const tab = uiStore.tab;
+  if (!loaded) return <div className="loading">Loading…</div>;
+
   return (
     <div className="app">
       <header className="topbar">
         <Segmented<Tab>
           block
           value={tab}
-          onChange={(value) => uiStore.setTab(value)}
+          onChange={setTab}
           options={[
             { value: 'chat', label: 'Chat', icon: <MessageOutlined /> },
             { value: 'skills', label: 'Skills', icon: <ThunderboltOutlined /> },
@@ -60,4 +61,4 @@ export const App = observer(function App() {
       </main>
     </div>
   );
-});
+}

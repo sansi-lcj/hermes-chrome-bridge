@@ -1,10 +1,9 @@
-import { observer } from 'mobx-react-lite';
 import { Button, Input, Select, Space, Typography } from 'antd';
-import { settingsForm } from '../../stores';
+import { useSettingsFormStore } from '../../stores';
 import type { ChatMode } from '../../lib/types';
 
-export const SettingsView = observer(function SettingsView() {
-  const f = settingsForm;
+export function SettingsView() {
+  const f = useSettingsFormStore();
 
   return (
     <div className="scroll-pane">
@@ -68,4 +67,4 @@ export const SettingsView = observer(function SettingsView() {
       </Typography.Paragraph>
     </div>
   );
-});
+}

@@ -95,17 +95,20 @@ sidepanel (React) ⇄ Port ⇄ background SW ⇄ fetch/SSE ⇄ Hermes API
 - `src/lib/storage.ts`, `src/lib/conversation.ts` — settings & chat persistence
 - `src/background/index.ts` — owns all Hermes access, streams over a Port
 - `src/content/index.ts` — supplies page context on demand
-- `src/stores/**` — **MobX** state: `SettingsStore`, `UiStore`, `CatalogStore`,
-  `ChatStore` (conversation + Port + streaming), `SettingsFormStore`
-- `src/sidepanel/**` — React UI; components are MobX `observer()`s that read the
-  stores (no hooks — state and side effects live in the stores)
+- `src/stores/**` — **Zustand** stores: `settings`, `ui`, `catalog`,
+  `chat` (conversation + Port + streaming), `settingsForm`
+- `src/sidepanel/**` — React UI; components read state via Zustand hooks
+  (`useChatStore((s) => …)`)
 
 ### State management
 
-State is held in MobX stores (singletons created at module load, imported
-directly — no Context/Provider). View components are `observer()`-wrapped and
-simply read observables and call store actions; side effects run via store
-constructors and `reaction`/`autorun`, so the UI code is hook-free.
+State lives in **Zustand** stores (created at module load, imported directly —
+no Context/Provider). Components subscribe with selector hooks
+(`useStore((s) => s.field)`); store actions and the non-reactive machinery (the
+Port, streaming) live in the store modules. Cross-store side effects (settings →
+model reload, tab → catalog load, conversation persistence) are wired once in
+`stores/index.ts` via `store.subscribe(...)`, and `initStores()` kicks off the
+initial load and Port connection.
 
 ## License
 
