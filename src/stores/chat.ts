@@ -28,6 +28,7 @@ import type {
   BackgroundToUi,
   ChatMessage,
   ChatMode,
+  ContentPart,
   ModelInfo,
   PageContext,
   PanelBroadcast,
@@ -85,6 +86,8 @@ interface ChatState {
   searchHits: SearchHit[] | null;
   /** Whether voice dictation is currently recording into the composer. */
   recording: boolean;
+  /** Image data URLs staged to send with the next message (e.g. screenshots). */
+  attachedImages: string[];
 
   setInput: (v: string) => void;
   setMode: (mode: ChatMode) => void;
@@ -116,6 +119,10 @@ interface ChatState {
   toggleVoice: () => void;
   /** Download a conversation as Markdown or JSON. */
   exportConversation: (id: string, format: 'md' | 'json') => Promise<void>;
+  /** Capture the active tab and stage it as an attachment for the next message. */
+  captureScreenshot: () => Promise<void>;
+  /** Discard a staged attachment by index. */
+  removeAttachment: (index: number) => void;
 }
 
 export const useChatStore = create<ChatState>()(
@@ -138,6 +145,7 @@ export const useChatStore = create<ChatState>()(
     searchQuery: '',
     searchHits: null,
     recording: false,
+    attachedImages: [],
 
     setInput: (input) => set({ input }),
     // Run mode and Agent tools are mutually exclusive (tools drive the chat
@@ -215,7 +223,14 @@ export const useChatStore = create<ChatState>()(
     newChat: () => {
       if (get().streaming) get().stop();
       // A draft: no storage is touched until the first message materializes it.
-      set({ messages: [], conversationId: null, system: '', input: '', pendingConfirm: null });
+      set({
+        messages: [],
+        conversationId: null,
+        system: '',
+        input: '',
+        pendingConfirm: null,
+        attachedImages: [],
+      });
     },
 
     selectConversation: async (id) => {
@@ -316,6 +331,15 @@ export const useChatStore = create<ChatState>()(
         json ? 'application/json' : 'text/markdown',
       );
     },
+
+    captureScreenshot: async () => {
+      const dataUrl = await sendRuntime<string>({ type: 'captureScreenshot' });
+      set({ attachedImages: [...get().attachedImages, dataUrl] });
+    },
+
+    removeAttachment: (index) => {
+      set({ attachedImages: get().attachedImages.filter((_, i) => i !== index) });
+    },
   })),
 );
 
@@ -359,7 +383,18 @@ function dispatch(content: string): void {
     useChatStore.setState({ conversations: touched });
   }
   void persistIndex();
-  startStream([...s.messages, { role: 'user', content }]);
+  const user: StoredMessage = { role: 'user', content };
+  if (s.attachedImages.length > 0) user.images = s.attachedImages;
+  useChatStore.setState({ attachedImages: [] }); // consumed by this turn
+  startStream([...s.messages, user]);
+}
+
+/** Build the wire content for a turn: plain text, or multimodal parts + images. */
+function toWireContent(m: StoredMessage): string | ContentPart[] {
+  if (!m.images || m.images.length === 0) return m.content;
+  const parts: ContentPart[] = m.content ? [{ type: 'text', text: m.content }] : [];
+  for (const url of m.images) parts.push({ type: 'image_url', image_url: { url } });
+  return parts;
 }
 
 /** Stream an answer for the given history (appends the assistant placeholder). */
@@ -378,7 +413,7 @@ function startStream(history: StoredMessage[]): void {
   activeReq = requestId;
   const payload: ChatMessage[] = history
     .filter((m) => m.role !== 'assistant' || m.content.length > 0)
-    .map((m) => ({ role: m.role, content: m.content }));
+    .map((m) => ({ role: m.role, content: toWireContent(m) }));
   if (s.system.trim()) payload.unshift({ role: 'system', content: s.system.trim() });
   sendPort({
     type: 'chat.start',
@@ -484,6 +519,7 @@ export async function loadActiveConversation(): Promise<void> {
     pendingConfirm: null,
     searchQuery: '',
     searchHits: null,
+    attachedImages: [],
   });
 }
 
@@ -511,12 +547,19 @@ async function runOnDevice(token: number): Promise<void> {
 async function consumePending(): Promise<void> {
   if (await takePendingNewChat()) useChatStore.getState().newChat();
   const p = await takePendingPrompt();
-  if (p) applyPrompt(p.text, p.autoSend);
+  if (p) applyPrompt(p.text, p.autoSend, p.append ?? false);
 }
 
-function applyPrompt(text: string, autoSend: boolean): void {
-  useChatStore.setState({ input: text });
-  if (autoSend) useChatStore.getState().sendMessage(text);
+function applyPrompt(text: string, autoSend: boolean, append = false): void {
+  // Quote-reply appends to the current composer; everything else replaces it.
+  const input = append ? joinInput(useChatStore.getState().input, text) : text;
+  useChatStore.setState({ input });
+  if (autoSend) useChatStore.getState().sendMessage(input);
+}
+
+/** Append `addition` to `current`, separated by a blank line when both exist. */
+export function joinInput(current: string, addition: string): string {
+  return current.trim() ? `${current.replace(/\s+$/, '')}\n\n${addition}` : addition;
 }
 
 function onBroadcast(msg: PanelBroadcast): void {

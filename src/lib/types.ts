@@ -53,9 +53,15 @@ export interface ToolCall {
   function: { name: string; arguments: string };
 }
 
+/** OpenAI multimodal content part (used when a message carries images). */
+export type ContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } };
+
 export interface ChatMessage {
   role: ChatRole;
-  content: string;
+  /** Plain text, or multimodal parts when the turn includes images. */
+  content: string | ContentPart[];
   /** Present on assistant turns that request tools. */
   tool_calls?: ToolCall[];
   /** Links a tool result back to the assistant's tool call. */

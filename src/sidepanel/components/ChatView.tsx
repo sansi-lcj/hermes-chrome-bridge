@@ -107,6 +107,13 @@ export function ChatView() {
     if (busy && i === lastIndex) return undefined;
     return (
       <div className="msg-footer">
+        {m.images && m.images.length > 0 && (
+          <div className="msg-images">
+            {m.images.map((src, j) => (
+              <img key={j} src={src} alt={`Attachment ${j + 1}`} />
+            ))}
+          </div>
+        )}
         {m.tools && m.tools.length > 0 && (
           <ThoughtChain
             items={m.tools.map((t, j) => ({

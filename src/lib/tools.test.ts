@@ -29,9 +29,25 @@ describe('tools', () => {
     );
   });
 
-  it('list_tabs returns the open tabs', async () => {
+  it('list_tabs returns the open tabs with ids', async () => {
     const out = JSON.parse(await runTool('list_tabs', ''));
-    expect(out).toEqual([{ title: 'Example', url: 'https://example.com', active: true }]);
+    expect(out).toEqual([{ id: 1, title: 'Example', url: 'https://example.com', active: true }]);
+  });
+
+  it('read_tab reads a specific tab by id', async () => {
+    sendMessage.mockResolvedValueOnce({
+      title: 'Doc',
+      url: 'https://x',
+      selection: '',
+      text: 'body text',
+    } as never);
+    const out = JSON.parse(await runTool('read_tab', '{"id":7}'));
+    expect(out).toEqual({ title: 'Doc', url: 'https://x', text: 'body text' });
+    expect(sendMessage).toHaveBeenCalledWith(7, { type: 'getPageContext' });
+  });
+
+  it('read_tab rejects a non-numeric id', async () => {
+    expect(JSON.parse(await runTool('read_tab', '{"id":"nope"}')).error).toMatch(/tab id/);
   });
 
   it('get_page_elements relays the content-script scan', async () => {

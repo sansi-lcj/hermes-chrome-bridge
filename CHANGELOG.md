@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.11.0
+
+Browser-native reading (Phase 2 of the roadmap): the things a side-panel agent
+can do that a web chat can't.
+
+### Added
+
+- **Cross-tab research** — `list_tabs` now returns tab ids, and a new `read_tab`
+  tool reads any open tab by id, so the agent can compare/synthesize across
+  several tabs ("read these 3 tabs and contrast them").
+- **Screenshot Q&A** — a camera button captures the active tab
+  (`chrome.tabs.captureVisibleTab`) and stages it as an attachment; the next
+  message is sent as OpenAI multimodal content (`image_url` parts) to
+  vision-capable models. Thumbnails show on the staged composer and the sent
+  message.
+- **Quote-reply** — a "Quote … in Hermes chat" context menu appends the
+  selection as a Markdown quote to the **current** composer (vs. the existing
+  "Ask about" which starts fresh).
+- Tests: `read_tab` (and `list_tabs` ids), the multimodal send payload +
+  attachment staging/removal, and quote-append joining.
+
+### Changed
+
+- The internal chat protocol's message `content` may now be multimodal parts
+  (`string | ContentPart[]`); plain text turns are unchanged on the wire.
+
 ## 1.10.0
 
 Chat-power features (Phase 1 of the feature roadmap): the composer and
