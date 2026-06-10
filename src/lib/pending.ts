@@ -6,6 +6,8 @@ export interface PendingPrompt {
   text: string;
   /** When true, the panel sends it immediately instead of just prefilling. */
   autoSend: boolean;
+  /** When true, append to the current composer instead of replacing it. */
+  append?: boolean;
 }
 
 const KEY = 'pendingPrompt';

@@ -162,3 +162,7 @@ test('conversation search filters the drawer to matches', async ({ page, extensi
   await page.getByLabel('Search conversations').fill('nonexistent-xyz');
   await expect(page.getByText('No matches')).toBeVisible();
 });
+
+// Note: screenshot capture (chrome.tabs.captureVisibleTab) is exercised by unit
+// tests around the chat store's multimodal payload; it can't run in the headless
+// harness because the panel page isn't a capturable web tab.

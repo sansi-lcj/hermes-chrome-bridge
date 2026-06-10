@@ -28,11 +28,8 @@ async function activeTabId(): Promise<number> {
   return tab.id;
 }
 
-/** Message the active tab's content script, with a friendly error off-limits pages. */
-async function toContent<T>(message: Record<string, unknown>): Promise<T> {
-  // Resolve the tab first so its errors ("No active tab.") keep their own
-  // message instead of being misattributed to a missing content script.
-  const tabId = await activeTabId();
+/** Message a specific tab's content script, with a friendly off-limits error. */
+async function toTab<T>(tabId: number, message: Record<string, unknown>): Promise<T> {
   try {
     return (await chrome.tabs.sendMessage(tabId, message)) as T;
   } catch {
@@ -40,14 +37,24 @@ async function toContent<T>(message: Record<string, unknown>): Promise<T> {
   }
 }
 
+/** Message the active tab's content script, with a friendly error off-limits pages. */
+async function toContent<T>(message: Record<string, unknown>): Promise<T> {
+  // Resolve the tab first so its errors ("No active tab.") keep their own
+  // message instead of being misattributed to a missing content script.
+  return toTab<T>(await activeTabId(), message);
+}
+
 export const TOOLS: ToolDef[] = [
   {
     name: 'list_tabs',
-    description: "List the user's open browser tabs (title and URL).",
+    description:
+      "List the user's open browser tabs (id, title and URL). Use an id with read_tab to read that tab.",
     parameters: noParams,
     execute: async () => {
       const tabs = await chrome.tabs.query({});
-      return JSON.stringify(tabs.map((t) => ({ title: t.title, url: t.url, active: t.active })));
+      return JSON.stringify(
+        tabs.map((t) => ({ id: t.id, title: t.title, url: t.url, active: t.active })),
+      );
     },
   },
   {
@@ -56,6 +63,27 @@ export const TOOLS: ToolDef[] = [
     parameters: noParams,
     execute: async () => {
       const ctx = await toContent<PageContext>({ type: 'getPageContext' });
+      return JSON.stringify({
+        title: ctx.title,
+        url: ctx.url,
+        text: ctx.text.slice(0, PAGE_TEXT_CAP),
+      });
+    },
+  },
+  {
+    name: 'read_tab',
+    description:
+      'Read the text content of a specific open tab by its id (from list_tabs). Use this to compare or synthesize across several tabs.',
+    parameters: {
+      type: 'object',
+      properties: { id: { type: 'number', description: 'Tab id from list_tabs.' } },
+      required: ['id'],
+      additionalProperties: false,
+    },
+    execute: async (args) => {
+      const id = Number(args.id);
+      if (!Number.isInteger(id)) throw new Error('id must be a tab id from list_tabs.');
+      const ctx = await toTab<PageContext>(id, { type: 'getPageContext' });
       return JSON.stringify({
         title: ctx.title,
         url: ctx.url,

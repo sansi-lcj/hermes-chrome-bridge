@@ -32,7 +32,15 @@ vi.stubGlobal('chrome', {
   },
 });
 
-const { useChatStore, onPortMessage } = await import('./chat');
+const { useChatStore, onPortMessage, joinInput } = await import('./chat');
+
+describe('joinInput (quote-reply append)', () => {
+  it('appends with a blank-line separator, or replaces when empty', () => {
+    expect(joinInput('', '> quote')).toBe('> quote');
+    expect(joinInput('hello', '> quote')).toBe('hello\n\n> quote');
+    expect(joinInput('hello\n\n', '> quote')).toBe('hello\n\n> quote');
+  });
+});
 
 const startId = () => (sent.find((m) => m.type === 'chat.start')?.requestId as string) ?? '';
 
@@ -55,6 +63,7 @@ describe('chat store', () => {
       searchQuery: '',
       searchHits: null,
       recording: false,
+      attachedImages: [],
     });
   });
 
@@ -221,6 +230,32 @@ describe('chat store', () => {
       body: 'Summarize: {{input}}',
     });
     expect(useChatStore.getState().input).toBe('Summarize: extra words');
+  });
+
+  it('sends a staged screenshot as multimodal content, then clears attachments', () => {
+    useChatStore.setState({ attachedImages: ['data:image/png;base64,AAA'] });
+    useChatStore.getState().sendMessage('what is this chart?');
+
+    // The stored user turn carries the image for display.
+    const user = useChatStore.getState().messages.find((m) => m.role === 'user');
+    expect(user?.images).toEqual(['data:image/png;base64,AAA']);
+    expect(useChatStore.getState().attachedImages).toEqual([]); // consumed
+
+    // The wire payload uses OpenAI multimodal parts.
+    const start = sent.find((m) => m.type === 'chat.start') as {
+      messages: Array<{ role: string; content: unknown }>;
+    };
+    const wireUser = start.messages.find((m) => m.role === 'user')!;
+    expect(wireUser.content).toEqual([
+      { type: 'text', text: 'what is this chart?' },
+      { type: 'image_url', image_url: { url: 'data:image/png;base64,AAA' } },
+    ]);
+  });
+
+  it('removeAttachment drops a staged image', () => {
+    useChatStore.setState({ attachedImages: ['a', 'b', 'c'] });
+    useChatStore.getState().removeAttachment(1);
+    expect(useChatStore.getState().attachedImages).toEqual(['a', 'c']);
   });
 
   it('clears streaming and flags the interruption when the port drops mid-stream', () => {

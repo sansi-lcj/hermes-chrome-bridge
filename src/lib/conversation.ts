@@ -14,6 +14,8 @@ export interface StoredMessage {
   role: ChatRole;
   content: string;
   tools?: string[];
+  /** Image data URLs attached to a user turn (e.g. a page screenshot). */
+  images?: string[];
 }
 
 /** One conversation's metadata (messages are stored separately). */

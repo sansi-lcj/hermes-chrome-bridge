@@ -27,6 +27,7 @@ import type {
 
 const PORT_NAME = 'hermes';
 const MENU_ASK = 'hermes-ask-selection';
+const MENU_QUOTE = 'hermes-quote-selection';
 const MENU_SUMMARIZE = 'hermes-summarize-page';
 /** Tool-call args shown in the progress trail are truncated to this length. */
 const ARGS_PREVIEW_CHARS = 120;
@@ -50,6 +51,11 @@ chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.create({
       id: MENU_ASK,
       title: 'Ask Hermes about “%s”',
+      contexts: ['selection'],
+    });
+    chrome.contextMenus.create({
+      id: MENU_QUOTE,
+      title: 'Quote “%s” in Hermes chat',
       contexts: ['selection'],
     });
     chrome.contextMenus.create({
@@ -289,6 +295,13 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   void (async () => {
     if (info.menuItemId === MENU_ASK && info.selectionText) {
       await deliverPrompt(`About this text:\n\n"""\n${info.selectionText}\n"""\n`, false);
+    } else if (info.menuItemId === MENU_QUOTE && info.selectionText) {
+      // Append the selection as a Markdown quote to the current composer.
+      const quote = info.selectionText
+        .split('\n')
+        .map((line) => `> ${line}`)
+        .join('\n');
+      await deliverPrompt(`${quote}\n\n`, false, true);
     } else if (info.menuItemId === MENU_SUMMARIZE) {
       const ctx = await readPageContext(tab?.id).catch(() => null);
       const body = ctx ? `${ctx.title}\n${ctx.url}\n\n${ctx.text}` : '';
@@ -322,8 +335,8 @@ chrome.omnibox.setDefaultSuggestion({
  * reads the prompt from storage (single source of truth, consumed once), so it
  * is applied exactly once whether the panel was already open or opens fresh.
  */
-async function deliverPrompt(text: string, autoSend: boolean): Promise<void> {
-  await setPendingPrompt({ text, autoSend });
+async function deliverPrompt(text: string, autoSend: boolean, append = false): Promise<void> {
+  await setPendingPrompt({ text, autoSend, append });
   broadcast({ type: 'pendingPrompt' });
 }
 
@@ -400,8 +413,25 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       .catch((err) => sendResponse({ ok: false, error: errorMessage(err) }));
     return true;
   }
+  if (message?.type === 'captureScreenshot') {
+    captureVisibleTab()
+      .then((dataUrl) => sendResponse({ ok: true, data: dataUrl }))
+      .catch((err) => sendResponse({ ok: false, error: errorMessage(err) }));
+    return true;
+  }
   return false;
 });
+
+/** Capture the active tab as a PNG data URL (for screenshot Q&A). */
+async function captureVisibleTab(): Promise<string> {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab?.windowId == null) throw new Error('No active tab to capture.');
+  try {
+    return await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
+  } catch (err) {
+    throw new Error(`Could not capture this page (${String(err)}).`);
+  }
+}
 
 async function handleApi(req: ApiRequest): Promise<unknown> {
   // An explicit settings payload (e.g. Test connection on an unsaved form

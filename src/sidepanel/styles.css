@@ -189,6 +189,54 @@ body {
 .mic.recording {
   color: #ff6b6b;
 }
+
+/* Staged attachments (screenshots) above the composer */
+.attachments {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 0 2px 8px;
+}
+.attachment {
+  position: relative;
+}
+.attachment img {
+  height: 48px;
+  width: auto;
+  max-width: 96px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+.attachment-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+.attachment-remove:hover {
+  color: #ff6b6b;
+}
+
+/* Image thumbnails on a sent message */
+.msg-images {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.msg-images img {
+  max-height: 160px;
+  max-width: 100%;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
 .edit-box {
   display: flex;
   flex-direction: column;
