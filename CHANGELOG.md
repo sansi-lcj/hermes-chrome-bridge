@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.7.1
+
+### Fixed
+
+- **Could not connect to any Hermes URL that includes a port** (e.g.
+  `http://127.0.0.1:8642`). Chrome rejects host match patterns that contain a
+  port, so `chrome.permissions.request` failed → the host permission wasn't
+  granted → Settings wouldn't save and requests were blocked. `originPattern`
+  now drops the port (`http://127.0.0.1/*`), which is the only granularity Chrome
+  allows and grants the host on all ports. This unblocks the default Hermes
+  deployment (port 8642) and SSH-tunnel setups.
+
 ## 1.7.0
 
 Hardening + a modernized panel, both backed by tests.

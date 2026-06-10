@@ -31,8 +31,9 @@ describe('SettingsView', () => {
     await user.type(screen.getByPlaceholderText('API_SERVER_KEY'), 'secret');
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
+    // Port dropped — Chrome match patterns can't contain a port.
     expect(chrome.permissions.request).toHaveBeenCalledWith({
-      origins: ['http://localhost:9999/*'],
+      origins: ['http://localhost/*'],
     });
     expect(message.success).toHaveBeenCalledWith('Saved.');
     expect(useSettingsStore.getState().baseUrl).toBe('http://localhost:9999');
