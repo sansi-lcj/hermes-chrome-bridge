@@ -7,12 +7,23 @@ import {
   newConversationId,
   removeMessages,
   saveIndex,
+  searchConversations,
   titleFrom,
   type ConversationMeta,
+  type SearchHit,
   type StoredMessage,
 } from '../lib/conversation';
+import { downloadText, fileStem, toJson, toMarkdown } from '../lib/export';
 import { sendRuntime } from '../lib/messaging';
 import { takePendingNewChat, takePendingPrompt } from '../lib/pending';
+import { startDictation, type Dictation } from '../lib/speech';
+import {
+  needsClipboard,
+  needsPageContext,
+  renderTemplate,
+  varsFromContext,
+  type PromptTemplate,
+} from '../lib/templates';
 import type {
   BackgroundToUi,
   ChatMessage,
@@ -40,6 +51,8 @@ let sendInFlight = false;
  */
 let conversationAccountId: string | null = null;
 let convLoadToken = 0;
+let searchToken = 0;
+let dictation: Dictation | null = null;
 
 export function getConversationAccountId(): string | null {
   return conversationAccountId;
@@ -67,6 +80,11 @@ interface ChatState {
   autoApproveActions: boolean;
   /** A pending write-tool confirmation awaiting the user's decision. */
   pendingConfirm: { confirmId: string; tool: string; args: string } | null;
+  /** Conversation-search query and results (null = not searching). */
+  searchQuery: string;
+  searchHits: SearchHit[] | null;
+  /** Whether voice dictation is currently recording into the composer. */
+  recording: boolean;
 
   setInput: (v: string) => void;
   setMode: (mode: ChatMode) => void;
@@ -82,12 +100,22 @@ interface ChatState {
   regenerate: () => void;
   /** Remove one message from the conversation. */
   deleteMessage: (index: number) => void;
+  /** Rewrite a past user message and re-ask from there (drops later turns). */
+  editMessage: (index: number, text: string) => void;
   stop: () => void;
   /** Start a fresh draft chat (materialized on the first message). */
   newChat: () => void;
   selectConversation: (id: string) => Promise<void>;
   renameConversation: (id: string, title: string) => void;
   deleteConversation: (id: string) => Promise<void>;
+  /** Search this account's conversations by title + content. */
+  setSearchQuery: (q: string) => void;
+  /** Expand a quick-command template into the composer (fills runtime vars). */
+  applyTemplate: (template: PromptTemplate) => Promise<void>;
+  /** Start/stop voice dictation into the composer. */
+  toggleVoice: () => void;
+  /** Download a conversation as Markdown or JSON. */
+  exportConversation: (id: string, format: 'md' | 'json') => Promise<void>;
 }
 
 export const useChatStore = create<ChatState>()(
@@ -107,6 +135,9 @@ export const useChatStore = create<ChatState>()(
     agentTools: false,
     autoApproveActions: false,
     pendingConfirm: null,
+    searchQuery: '',
+    searchHits: null,
+    recording: false,
 
     setInput: (input) => set({ input }),
     // Run mode and Agent tools are mutually exclusive (tools drive the chat
@@ -161,6 +192,20 @@ export const useChatStore = create<ChatState>()(
       set({ messages: get().messages.filter((_, i) => i !== index) });
     },
 
+    editMessage: (index, text) => {
+      const s = get();
+      if (s.streaming) return;
+      const target = s.messages[index];
+      const clean = text.trim();
+      if (!target || target.role !== 'user' || !clean) return;
+      // Rewrite the user turn and re-ask from there, dropping everything below.
+      const history: StoredMessage[] = [
+        ...s.messages.slice(0, index),
+        { role: 'user', content: clean },
+      ];
+      startStream(history);
+    },
+
     stop: () => {
       odToken++; // cancel any on-device stream
       if (activeReq) sendPort({ type: 'cancel', requestId: activeReq });
@@ -207,6 +252,69 @@ export const useChatStore = create<ChatState>()(
         set({ conversations });
       }
       void persistIndex();
+    },
+
+    setSearchQuery: (q) => {
+      set({ searchQuery: q });
+      const query = q.trim();
+      if (!query) {
+        set({ searchHits: null });
+        return;
+      }
+      const token = ++searchToken;
+      const index = { conversations: get().conversations, activeId: get().conversationId };
+      void searchConversations(conversationAccountId, index, query).then((hits) => {
+        if (token === searchToken) set({ searchHits: hits });
+      });
+    },
+
+    applyTemplate: async (template) => {
+      // Strip the "/name " the user typed; the remainder becomes {{input}}.
+      const input = get().input.replace(/^\/\S*\s*/, '');
+      let ctx: PageContext | null = null;
+      if (needsPageContext(template.body)) {
+        ctx = await sendRuntime<PageContext>({ type: 'getActivePageContext' }).catch(() => null);
+      }
+      const vars = varsFromContext(ctx, input);
+      if (needsClipboard(template.body)) {
+        vars.clipboard = await navigator.clipboard.readText().catch(() => '');
+      }
+      set({ input: renderTemplate(template.body, vars) });
+    },
+
+    toggleVoice: () => {
+      if (dictation) {
+        dictation.stop();
+        return; // onEnd clears `recording` and the handle
+      }
+      dictation = startDictation(
+        {
+          onText: (text) => {
+            const cur = useChatStore.getState().input;
+            set({ input: cur ? `${cur} ${text}` : text });
+          },
+          onEnd: () => {
+            dictation = null;
+            set({ recording: false });
+          },
+        },
+        navigator.language,
+      );
+      if (dictation) set({ recording: true });
+    },
+
+    exportConversation: async (id, format) => {
+      const meta = get().conversations.find((c) => c.id === id);
+      const messages =
+        id === get().conversationId
+          ? get().messages
+          : await loadMessages(conversationAccountId, id);
+      const json = format === 'json';
+      downloadText(
+        `${fileStem(meta?.title)}.${json ? 'json' : 'md'}`,
+        json ? toJson(meta, messages) : toMarkdown(meta, messages),
+        json ? 'application/json' : 'text/markdown',
+      );
     },
   })),
 );
@@ -374,6 +482,8 @@ export async function loadActiveConversation(): Promise<void> {
     system: meta?.system ?? '',
     input: '',
     pendingConfirm: null,
+    searchQuery: '',
+    searchHits: null,
   });
 }
 

@@ -1,14 +1,4 @@
-import {
-  Button,
-  Drawer,
-  Empty,
-  Input,
-  Popconfirm,
-  Popover,
-  Select,
-  Tooltip,
-  Typography,
-} from 'antd';
+import { Button, Input, Popover, Select, Tooltip, Typography } from 'antd';
 import {
   CommentOutlined,
   CopyOutlined,
@@ -21,13 +11,15 @@ import {
   ToolOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
-import { Bubble, Prompts, Sender, ThoughtChain, Welcome } from '@ant-design/x';
+import { Bubble, Prompts, ThoughtChain, Welcome } from '@ant-design/x';
 import type { BubbleItemType, BubbleListProps } from '@ant-design/x';
 import { useShallow } from 'zustand/react/shallow';
 import { actionSummary } from '../../lib/actionSummary';
 import { feedback } from '../../lib/feedback';
 import type { StoredMessage } from '../../lib/conversation';
 import { useChatStore, useSettingsStore, useUiStore } from '../../stores';
+import { Composer } from './Composer';
+import { ConversationsDrawer } from './ConversationsDrawer';
 import { Markdown } from './Markdown';
 import { ToggleChip } from './ToggleChip';
 
@@ -58,10 +50,7 @@ export function ChatView() {
   const chat = useChatStore(
     useShallow((s) => ({
       messages: s.messages,
-      conversations: s.conversations,
-      conversationId: s.conversationId,
       system: s.system,
-      input: s.input,
       streaming: s.streaming,
       model: s.model,
       mode: s.mode,
@@ -86,14 +75,10 @@ export function ChatView() {
       setAutoApprove: s.setAutoApprove,
       setSystem: s.setSystem,
       resolveConfirm: s.resolveConfirm,
-      sendMessage: s.sendMessage,
       regenerate: s.regenerate,
       deleteMessage: s.deleteMessage,
-      stop: s.stop,
+      editMessage: s.editMessage,
       newChat: s.newChat,
-      selectConversation: s.selectConversation,
-      renameConversation: s.renameConversation,
-      deleteConversation: s.deleteConversation,
     })),
   );
 
@@ -101,7 +86,6 @@ export function ChatView() {
   const accounts = useSettingsStore((s) => s.accounts);
   const activeId = useSettingsStore((s) => s.activeId);
   const setActive = useSettingsStore((s) => s.setActive);
-  const convsOpen = useUiStore((s) => s.convsOpen);
   const setConvsOpen = useUiStore((s) => s.setConvsOpen);
 
   const ids = new Set(chat.models.map((m) => m.id));
@@ -117,9 +101,10 @@ export function ChatView() {
     footer: messageFooter(m, i),
   }));
 
-  /** Per-message actions (copy / regenerate / delete) + the tool trail. */
+  /** Per-message actions (copy / edit / regenerate / delete) + the tool trail. */
   function messageFooter(m: StoredMessage, i: number) {
     const busy = chat.streaming;
+    if (busy && i === lastIndex) return undefined;
     return (
       <div className="msg-footer">
         {m.tools && m.tools.length > 0 && (
@@ -131,41 +116,55 @@ export function ChatView() {
             }))}
           />
         )}
-        {!(busy && i === lastIndex) && (
-          <div className="msg-actions">
-            <Tooltip title="Copy">
+        <div className="msg-actions">
+          <Tooltip title="Copy">
+            <Button
+              type="text"
+              size="small"
+              icon={<CopyOutlined />}
+              aria-label="Copy message"
+              onClick={() => copyText(m.content)}
+            />
+          </Tooltip>
+          {m.role === 'user' && !busy && (
+            <Popover
+              trigger="click"
+              placement="topRight"
+              content={<EditBox initial={m.content} onSave={(text) => act.editMessage(i, text)} />}
+            >
+              <Tooltip title="Edit & resend">
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<EditOutlined />}
+                  aria-label="Edit message"
+                />
+              </Tooltip>
+            </Popover>
+          )}
+          {m.role === 'assistant' && i === lastIndex && !busy && (
+            <Tooltip title="Regenerate">
               <Button
                 type="text"
                 size="small"
-                icon={<CopyOutlined />}
-                aria-label="Copy message"
-                onClick={() => copyText(m.content)}
+                icon={<ReloadOutlined />}
+                aria-label="Regenerate answer"
+                onClick={act.regenerate}
               />
             </Tooltip>
-            {m.role === 'assistant' && i === lastIndex && !busy && (
-              <Tooltip title="Regenerate">
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<ReloadOutlined />}
-                  aria-label="Regenerate answer"
-                  onClick={act.regenerate}
-                />
-              </Tooltip>
-            )}
-            {!busy && (
-              <Tooltip title="Delete">
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<DeleteOutlined />}
-                  aria-label="Delete message"
-                  onClick={() => act.deleteMessage(i)}
-                />
-              </Tooltip>
-            )}
-          </div>
-        )}
+          )}
+          {!busy && (
+            <Tooltip title="Delete">
+              <Button
+                type="text"
+                size="small"
+                icon={<DeleteOutlined />}
+                aria-label="Delete message"
+                onClick={() => act.deleteMessage(i)}
+              />
+            </Tooltip>
+          )}
+        </div>
       </div>
     );
   }
@@ -242,82 +241,7 @@ export function ChatView() {
         </Tooltip>
       </header>
 
-      <Drawer
-        title="Conversations"
-        placement="left"
-        width={260}
-        open={convsOpen}
-        onClose={() => setConvsOpen(false)}
-      >
-        <Button
-          block
-          type="primary"
-          icon={<EditOutlined />}
-          onClick={() => {
-            act.newChat();
-            setConvsOpen(false);
-          }}
-          style={{ marginBottom: 12 }}
-        >
-          New chat
-        </Button>
-        {chat.conversations.length === 0 ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No conversations yet" />
-        ) : (
-          <div className="conv-list">
-            {chat.conversations.map((c) => (
-              <div
-                key={c.id}
-                className={c.id === chat.conversationId ? 'conv-card active' : 'conv-card'}
-                role="button"
-                tabIndex={0}
-                aria-label={`Open conversation ${c.title || 'Untitled'}`}
-                onClick={(e) => {
-                  // Clicks on the rename pencil / its input / the delete button
-                  // are their own interactions, not a "select this chat".
-                  if ((e.target as HTMLElement).closest('button, input, textarea')) return;
-                  void act.selectConversation(c.id);
-                  setConvsOpen(false);
-                }}
-                onKeyDown={(e) => {
-                  if (e.target !== e.currentTarget) return; // typing in the rename input
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    void act.selectConversation(c.id);
-                    setConvsOpen(false);
-                  }
-                }}
-              >
-                <Typography.Text
-                  className="conv-title"
-                  ellipsis
-                  editable={{
-                    onChange: (t) => act.renameConversation(c.id, t),
-                    tooltip: 'Rename',
-                  }}
-                >
-                  {c.title || 'Untitled'}
-                </Typography.Text>
-                <Popconfirm
-                  title="Delete this conversation?"
-                  okText="Delete"
-                  okButtonProps={{ danger: true }}
-                  onConfirm={() => void act.deleteConversation(c.id)}
-                >
-                  <Button
-                    size="small"
-                    type="text"
-                    danger
-                    icon={<DeleteOutlined />}
-                    aria-label={`Delete conversation ${c.title || 'Untitled'}`}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                </Popconfirm>
-              </div>
-            ))}
-          </div>
-        )}
-      </Drawer>
+      <ConversationsDrawer />
 
       <div className="messages">
         {chat.messages.length === 0 ? (
@@ -408,16 +332,29 @@ export function ChatView() {
         )}
       </div>
 
-      <div className="composer">
-        <Sender
-          value={chat.input}
-          loading={chat.streaming}
-          onChange={act.setInput}
-          onSubmit={act.sendMessage}
-          onCancel={act.stop}
-          placeholder="Message the agent…  (Shift+Enter for newline)"
-        />
-      </div>
+      <Composer />
+    </div>
+  );
+}
+
+/** A small uncontrolled-ish edit box used in the message "Edit & resend" popover. */
+function EditBox({ initial, onSave }: { initial: string; onSave: (text: string) => void }) {
+  return (
+    <div className="edit-box">
+      <Input.TextArea
+        defaultValue={initial}
+        autoSize={{ minRows: 2, maxRows: 8 }}
+        aria-label="Edit message"
+        onPressEnter={(e) => {
+          if (!e.shiftKey) {
+            e.preventDefault();
+            onSave((e.target as HTMLTextAreaElement).value);
+          }
+        }}
+      />
+      <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+        Enter to resend · Shift+Enter for newline
+      </Typography.Text>
     </div>
   );
 }

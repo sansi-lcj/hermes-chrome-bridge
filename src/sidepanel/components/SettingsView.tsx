@@ -3,6 +3,7 @@ import { CheckCircleFilled, DeleteOutlined, EditOutlined, PlusOutlined } from '@
 import { useShallow } from 'zustand/react/shallow';
 import { useSettingsFormStore, useSettingsStore } from '../../stores';
 import type { ChatMode } from '../../lib/types';
+import { QuickCommands } from './QuickCommands';
 
 export function SettingsView() {
   const accounts = useSettingsStore((s) => s.accounts);
@@ -92,6 +93,8 @@ export function SettingsView() {
         the header or by tapping a card. All requests run from the background worker; granting the
         host permission lets it reach your Hermes server without server-side CORS changes.
       </Typography.Paragraph>
+
+      <QuickCommands />
     </div>
   );
 }

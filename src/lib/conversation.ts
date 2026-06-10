@@ -127,3 +127,50 @@ export async function removeMessages(
   if (!accountId || !convId) return;
   await chrome.storage.local.remove(messagesKey(accountId, convId));
 }
+
+/** A conversation that matched a search, with a snippet around the first hit. */
+export interface SearchHit {
+  id: string;
+  title: string;
+  /** Context around the first match (or the title, for title-only matches). */
+  snippet: string;
+}
+
+const SNIPPET_RADIUS = 40;
+
+/** Build a "…context [match] context…" snippet around the first occurrence. */
+export function snippetAround(text: string, query: string): string {
+  const i = text.toLowerCase().indexOf(query.toLowerCase());
+  if (i === -1) return text.slice(0, SNIPPET_RADIUS * 2).trim();
+  const start = Math.max(0, i - SNIPPET_RADIUS);
+  const end = Math.min(text.length, i + query.length + SNIPPET_RADIUS);
+  return `${start > 0 ? '…' : ''}${text.slice(start, end).trim()}${end < text.length ? '…' : ''}`;
+}
+
+/**
+ * Search an account's conversations by title and message content. Loads each
+ * conversation's messages from local storage (small, on-device) and returns the
+ * matches most-recent-first, preserving the index's order.
+ */
+export async function searchConversations(
+  accountId: string | null,
+  index: ConversationIndex,
+  rawQuery: string,
+): Promise<SearchHit[]> {
+  const query = rawQuery.trim();
+  if (!accountId || query.length === 0) return [];
+  const lower = query.toLowerCase();
+  const hits: SearchHit[] = [];
+  for (const meta of index.conversations) {
+    if (meta.title.toLowerCase().includes(lower)) {
+      hits.push({ id: meta.id, title: meta.title, snippet: meta.title });
+      continue;
+    }
+    const messages = await loadMessages(accountId, meta.id);
+    const match = messages.find((m) => m.content.toLowerCase().includes(lower));
+    if (match) {
+      hits.push({ id: meta.id, title: meta.title, snippet: snippetAround(match.content, query) });
+    }
+  }
+  return hits;
+}
