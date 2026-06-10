@@ -492,3 +492,10 @@ body {
 .account-select {
   max-width: 130px;
 }
+.profile-tag {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin: 0;
+}

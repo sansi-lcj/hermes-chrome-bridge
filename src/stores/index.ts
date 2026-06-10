@@ -13,12 +13,14 @@ import {
   useChatStore,
 } from './chat';
 import { useCatalogStore } from './catalog';
+import { activeProfile, useProfilesStore } from './profiles';
 import { isConfigured, useSettingsStore } from './settings';
 import { useTemplatesStore } from './templates';
 import { useUiStore } from './ui';
 
 export { useChatStore } from './chat';
 export { useCatalogStore } from './catalog';
+export { useProfilesStore, activeProfile } from './profiles';
 export { useSettingsStore } from './settings';
 export { useSettingsFormStore } from './settingsForm';
 export { useTemplatesStore } from './templates';
@@ -89,7 +91,43 @@ export function initStores(): void {
     { equalityFn: shallow },
   );
 
+  // Seed a draft chat from the matching site profile: its system prompt,
+  // auto page-context, and (for "private" hosts) on-device routing. Only drafts
+  // are seeded — an in-progress conversation is never altered.
+  const seedDraftFromProfile = () => {
+    const chat = useChatStore.getState();
+    if (chat.conversationId !== null) return; // only seed a fresh draft
+    const prof = activeProfile();
+    if (!prof) return;
+    const patch: Record<string, unknown> = {};
+    if (prof.system && !chat.system) patch.system = prof.system;
+    if (prof.autoPageContext && !chat.attachContext) patch.attachContext = true;
+    if (prof.private && !chat.onDevice) patch.onDevice = true;
+    if (Object.keys(patch).length > 0) useChatStore.setState(patch);
+  };
+  useProfilesStore.subscribe((s) => [s.activeUrl, s.profiles] as const, seedDraftFromProfile, {
+    equalityFn: shallow,
+  });
+  useChatStore.subscribe((s) => s.conversationId, seedDraftFromProfile);
+
   initChat();
+  initActiveTabTracking();
   void useSettingsStore.getState().load();
   void useTemplatesStore.getState().load();
+  void useProfilesStore.getState().load();
+}
+
+/** Track the active tab's URL so site profiles can match it. */
+function initActiveTabTracking(): void {
+  if (typeof chrome === 'undefined' || !chrome.tabs) return;
+  const set = (url: string | undefined) => useProfilesStore.getState().setActiveUrl(url ?? '');
+  const refresh = () => {
+    chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => set(tab?.url));
+  };
+  refresh();
+  chrome.tabs.onActivated.addListener(refresh);
+  chrome.tabs.onUpdated.addListener((_id, info, tab) => {
+    if (tab.active && info.url) set(info.url);
+  });
+  chrome.windows?.onFocusChanged.addListener(refresh);
 }
