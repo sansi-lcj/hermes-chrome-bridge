@@ -240,3 +240,53 @@ body {
   justify-content: flex-end;
   margin-top: 2px;
 }
+
+/* Multi-account list */
+.account-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+.account-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+.account-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.account-card.active {
+  border-color: rgba(88, 101, 242, 0.8);
+  background: rgba(88, 101, 242, 0.1);
+}
+.account-main {
+  min-width: 0;
+}
+.account-name {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.account-active-ico {
+  color: #3ecf8e;
+}
+.account-sub {
+  font-size: 12px;
+  opacity: 0.6;
+  margin-top: 2px;
+  word-break: break-all;
+}
+.account-select {
+  max-width: 130px;
+}

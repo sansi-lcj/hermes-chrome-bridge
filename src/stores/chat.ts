@@ -103,7 +103,7 @@ export const useChatStore = create<ChatState>()(
     newChat: () => {
       if (get().streaming) get().stop();
       set({ messages: [], pendingConfirm: null });
-      void clearConversation();
+      void clearConversation(useSettingsStore.getState().activeId);
     },
   })),
 );
@@ -207,8 +207,12 @@ export async function loadModels(): Promise<void> {
   }
 }
 
-async function restore(): Promise<void> {
-  useChatStore.setState({ messages: await loadConversation() });
+/** Load the active account's conversation, resetting any in-flight state.
+ *  Called on startup and whenever the active account changes. */
+export async function loadActiveConversation(): Promise<void> {
+  useChatStore.getState().stop();
+  const messages = await loadConversation(useSettingsStore.getState().activeId);
+  useChatStore.setState({ messages, input: '', pendingConfirm: null });
 }
 
 async function detectOnDevice(): Promise<void> {
@@ -251,7 +255,8 @@ function onBroadcast(msg: PanelBroadcast): void {
 /** Wire side effects: Port, persisted history, on-device detection, prompts. */
 export function initChat(): void {
   connect();
-  void restore();
+  // The active account's conversation is loaded by the activeId subscription in
+  // stores/index once accounts have loaded.
   void detectOnDevice();
   void consumePending();
   chrome.runtime.onMessage.addListener(onBroadcast);
