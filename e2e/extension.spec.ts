@@ -66,8 +66,9 @@ test('write tools ask for confirmation before running', async ({ page, extension
   await composer.fill('please run an action');
   await composer.press('Enter');
 
-  // A confirmation prompt appears for the write tool; approving runs it.
-  await expect(page.getByText('open_url')).toBeVisible();
+  // A confirmation prompt appears for the write tool with a readable summary;
+  // approving runs it.
+  await expect(page.getByText(/Open https:\/\/example\.com/)).toBeVisible();
   await page.getByRole('button', { name: 'Allow' }).click();
   await expect(page.getByText('Tools done')).toBeVisible();
 });

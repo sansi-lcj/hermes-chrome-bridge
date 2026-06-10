@@ -8,6 +8,7 @@
 // - Answers one-off discovery requests (models, skills, sessions, health).
 // - Gathers page context from the active tab's content script.
 
+import { ConfirmBroker } from '../lib/confirmBroker';
 import { HermesClient, HermesError } from '../lib/hermesClient';
 import { setPendingPrompt } from '../lib/pending';
 import { addRun, listRuns, removeRun } from '../lib/runRegistry';
@@ -69,28 +70,25 @@ interface ActiveStream {
   isRun: boolean;
 }
 
-// Pending tool-confirmation prompts, keyed by confirmId, awaiting the UI's answer.
-const pendingConfirms = new Map<string, (approved: boolean) => void>();
-let confirmCounter = 0;
+// Write-tool confirmations: resolves false on deny/timeout/abort/panel-close,
+// so the tool loop can never park indefinitely. (Logic lives in confirmBroker
+// so it is unit-testable.)
+const confirms = new ConfirmBroker();
 
-/** Ask the UI to approve a write tool; resolves false on decline/timeout/closed panel. */
 function requestConfirm(
   channel: Channel,
   requestId: string,
   tool: string,
   args: string,
+  signal: AbortSignal,
 ): Promise<boolean> {
   if (!channel.alive) return Promise.resolve(false);
-  const confirmId = `cf-${Date.now()}-${confirmCounter++}`;
-  return new Promise((resolve) => {
-    const done = (approved: boolean) => {
-      pendingConfirms.delete(confirmId);
-      resolve(approved);
-    };
-    pendingConfirms.set(confirmId, done);
-    channel.post({ type: 'confirm', requestId, confirmId, tool, args });
-    setTimeout(() => pendingConfirms.has(confirmId) && done(false), 120_000);
-  });
+  return confirms.request(
+    (msg) => channel.post({ type: 'confirm', requestId, ...msg }),
+    tool,
+    args,
+    signal,
+  );
 }
 
 chrome.runtime.onConnect.addListener((port) => {
@@ -115,7 +113,7 @@ chrome.runtime.onConnect.addListener((port) => {
       return;
     }
     if (msg.type === 'confirm.result') {
-      pendingConfirms.get(msg.confirmId)?.(msg.approved);
+      confirms.resolve(msg.confirmId, msg.approved);
       return;
     }
     if (msg.type === 'chat.start') {
@@ -127,6 +125,7 @@ chrome.runtime.onConnect.addListener((port) => {
 
   port.onDisconnect.addListener(() => {
     channel.alive = false; // future posts are dropped
+    confirms.flush(); // nobody can answer them anymore
     // Cancel quick chat streams, but let long Runs finish in the background.
     for (const stream of active.values()) {
       if (!stream.isRun) stream.controller.abort();
@@ -145,7 +144,7 @@ async function runStream(
     if (useTools) {
       const guardedRun = createGuardedRunner(
         runTool,
-        (tool, args) => requestConfirm(channel, requestId, tool, args),
+        (tool, args) => requestConfirm(channel, requestId, tool, args, controller.signal),
         autoApprove,
       );
       for await (const ev of hermes.runToolLoop(

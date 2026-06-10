@@ -178,6 +178,17 @@ function connect(): void {
   port.onMessage.addListener((msg: BackgroundToUi) => onPortMessage(msg));
   port.onDisconnect.addListener(() => {
     port = null;
+    // The background aborts our in-flight stream when the port drops (e.g. the
+    // MV3 worker was recycled), so no chat.done will ever arrive — surface the
+    // interruption instead of spinning forever.
+    if (activeReq) {
+      activeReq = null;
+      patchLastAssistant((last) => ({
+        ...last,
+        content: last.content + '\n\n> ⚠️ Connection lost — response interrupted.',
+      }));
+      useChatStore.setState({ streaming: false, pendingConfirm: null });
+    }
     setTimeout(connect, 250);
   });
 }

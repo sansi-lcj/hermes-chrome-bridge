@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Capture what the store posts over the (faked) Port.
+// Capture what the store posts over the (faked) Port, and let tests trigger a
+// disconnect (simulating an MV3 worker recycle).
 const sent: Array<Record<string, unknown>> = [];
+const disconnectCbs: Array<() => void> = [];
+const triggerDisconnect = () => disconnectCbs.forEach((cb) => cb());
 const fakePort = {
   onMessage: { addListener: vi.fn() },
-  onDisconnect: { addListener: vi.fn() },
+  onDisconnect: { addListener: (cb: () => void) => disconnectCbs.push(cb) },
   postMessage: (m: Record<string, unknown>) => sent.push(m),
 };
 
@@ -85,6 +88,15 @@ describe('chat store', () => {
     useChatStore.getState().newChat();
     expect(useChatStore.getState().messages).toEqual([]);
     expect(useChatStore.getState().streaming).toBe(false);
+  });
+
+  it('clears streaming and flags the interruption when the port drops mid-stream', () => {
+    useChatStore.getState().sendMessage('hi');
+    expect(useChatStore.getState().streaming).toBe(true);
+    triggerDisconnect(); // MV3 worker recycled — no chat.done will arrive
+    const s = useChatStore.getState();
+    expect(s.streaming).toBe(false);
+    expect(s.messages[s.messages.length - 1].content).toMatch(/Connection lost/);
   });
 
   it('surfaces a tool confirmation and reports the decision', () => {

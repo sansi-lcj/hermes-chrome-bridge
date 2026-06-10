@@ -7,12 +7,32 @@ body,
 
 body {
   font-size: 14px;
+  color-scheme: dark;
+}
+
+/* Paint the panel surface on #root — antd's dark algorithm themes components but
+   injects a light `body` reset that would otherwise leave the surface white. */
+#root {
+  display: flex;
+  flex-direction: column;
+  background: #1f1f1f;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+/* antd's <App> injects a .ant-app wrapper between #root and .app; keep the
+   full-height flex chain unbroken through it so the composer pins to the bottom. */
+.ant-app {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .app {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
 }
 
 .loading,
@@ -49,19 +69,30 @@ body {
 .chat {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1;
   min-height: 0;
 }
-.chat-toolbar {
+.chat-header {
   display: flex;
-  gap: 8px;
   align-items: center;
-  flex-wrap: wrap;
-  padding: 8px 10px;
+  gap: 6px;
+  padding: 6px 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
-.chat-toolbar .new-chat {
-  margin-left: auto;
+.chat-header .spacer {
+  flex: 1;
+}
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+  flex: none;
+  margin-left: 4px;
+}
+.status-dot.ok {
+  background: #3ecf8e;
+  box-shadow: 0 0 0 3px rgba(62, 207, 142, 0.18);
 }
 .messages {
   flex: 1;
@@ -74,9 +105,45 @@ body {
   flex-direction: column;
   gap: 16px;
 }
+
+/* Composer option chips */
+.chip-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 8px 10px 0;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text, rgba(255, 255, 255, 0.78));
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
+}
+.chip:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+.chip-on {
+  color: #fff;
+  background: rgba(88, 101, 242, 0.9);
+  border-color: rgba(88, 101, 242, 0.9);
+}
+.chip-icon {
+  display: inline-flex;
+  font-size: 12px;
+}
 .composer {
   padding: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 /* Generic scrollable panes (skills / sessions / settings) */
@@ -146,24 +213,30 @@ body {
 
 /* Tool action confirmation prompt */
 .confirm-card {
-  margin: 0 10px 8px;
-  padding: 8px 10px;
-  border: 1px solid rgba(88, 101, 242, 0.5);
-  border-radius: 8px;
-  background: rgba(88, 101, 242, 0.12);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  margin: 8px 10px 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(245, 191, 79, 0.5);
+  border-radius: 10px;
+  background: rgba(245, 191, 79, 0.12);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  align-items: start;
 }
-.confirm-args {
-  margin-left: 6px;
-  opacity: 0.7;
-  font-family: ui-monospace, monospace;
-  font-size: 12px;
-  word-break: break-all;
+.confirm-ico {
+  color: #f5bf4f;
+  font-size: 15px;
+  margin-top: 2px;
+}
+.confirm-text {
+  font-size: 13px;
+  line-height: 1.45;
+  word-break: break-word;
 }
 .confirm-actions {
+  grid-column: 2;
   display: flex;
   gap: 8px;
   justify-content: flex-end;
+  margin-top: 2px;
 }

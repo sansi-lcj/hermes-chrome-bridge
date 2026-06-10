@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.7.0
+
+Hardening + a modernized panel, both backed by tests.
+
+### Fixed
+
+- **Chat no longer hangs in “streaming…” when the MV3 worker is recycled** mid
+  response — the panel detects the dropped Port, stops the spinner, and notes the
+  interruption (`stores/chat.ts`; regression test added).
+- **Tool-confirmation never parks the agent loop.** Extracted a tested
+  `ConfirmBroker`: a confirmation resolves false on deny, timeout, **Stop
+  (abort)**, or panel close, and pending prompts are flushed on disconnect.
+- **Panel surface no longer flashes white / shows invisible text** — antd's dark
+  algorithm themes components but injects a light `body` reset; the surface is
+  now painted on `#root`, and the full-height flex chain is kept through antd's
+  `.ant-app` wrapper so the composer pins to the bottom.
+
+### Changed — modern UI
+
+- Composer options are now compact **pill toggles** (Run / Page / Tools /
+  Auto-run / On-device) instead of a cramped switch row; a slim header shows a
+  **connection-status dot**, the model picker, and New chat.
+- The action-confirmation card shows a **human-readable summary**
+  (“Open https://…”, “Click element #3”) via the tested `actionSummary`, not raw
+  JSON.
+
+### Added — tests
+
+- `@testing-library/react` set up; **component tests** for `Markdown` (incl. XSS
+  sanitization) and the full `SettingsView` save flow.
+- Unit tests for `ConfirmBroker` (approve/deny/timeout/abort/flush) and
+  `actionSummary`. 83 unit/integration + 4 E2E.
+
 ## 1.6.1
 
 Local hands-on verification tooling.

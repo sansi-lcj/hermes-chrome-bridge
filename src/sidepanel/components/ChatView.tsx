@@ -1,14 +1,23 @@
-import { Button, Select, Switch, Tooltip } from 'antd';
-import { EditOutlined, FileTextOutlined, RobotOutlined, ToolOutlined } from '@ant-design/icons';
+import { Button, Select, Tooltip } from 'antd';
+import {
+  EditOutlined,
+  FileTextOutlined,
+  RobotOutlined,
+  ThunderboltOutlined,
+  ToolOutlined,
+  WarningOutlined,
+} from '@ant-design/icons';
 import { Bubble, Prompts, Sender, ThoughtChain, Welcome } from '@ant-design/x';
 import type { BubbleItemType, BubbleListProps } from '@ant-design/x';
-import { useChatStore } from '../../stores';
+import { actionSummary } from '../../lib/actionSummary';
+import { useChatStore, useSettingsStore } from '../../stores';
 import { Markdown } from './Markdown';
+import { ToggleChip } from './ToggleChip';
 
 const SUGGESTIONS = [
   { key: 's1', label: 'Summarize the current page', description: 'Uses page context' },
   { key: 's2', label: 'Explain a selected concept', description: 'Paste or select text' },
-  { key: 's3', label: 'Draft a reply', description: 'Give the agent the thread' },
+  { key: 's3', label: 'List my open tabs', description: 'Needs Tools' },
 ];
 
 // Static role config (no per-render allocation needed).
@@ -47,6 +56,8 @@ export function ChatView() {
   const stop = useChatStore((s) => s.stop);
   const newChat = useChatStore((s) => s.newChat);
 
+  const configured = useSettingsStore((s) => Boolean(s.baseUrl && s.apiKey));
+
   const ids = new Set(models.map((m) => m.id));
   if (model) ids.add(model);
   const modelOptions = [...ids].map((id) => ({ value: id, label: id }));
@@ -73,85 +84,46 @@ export function ChatView() {
 
   return (
     <div className="chat">
-      <div className="chat-toolbar">
+      <header className="chat-header">
+        <span className={configured ? 'status-dot ok' : 'status-dot'} aria-hidden />
         <Select
           size="small"
+          variant="borderless"
           value={model}
           onChange={setModel}
           options={modelOptions}
-          style={{ minWidth: 120 }}
+          style={{ minWidth: 110 }}
           popupMatchSelectWidth={false}
         />
-        <Tooltip title="Use the Runs API for long autonomous tasks">
-          <Switch
+        <span className="spacer" />
+        <Tooltip title="New chat">
+          <Button
+            type="text"
             size="small"
-            aria-label="Run mode"
-            checked={mode === 'run'}
-            onChange={(v) => setMode(v ? 'run' : 'chat')}
-            checkedChildren="Run"
-            unCheckedChildren="Chat"
+            icon={<EditOutlined />}
+            aria-label="New chat"
+            onClick={newChat}
           />
         </Tooltip>
-        <Tooltip title="Attach the current page's selection/content">
-          <Switch
-            size="small"
-            aria-label="Attach page context"
-            checked={attachContext}
-            onChange={setAttachContext}
-            checkedChildren={<FileTextOutlined />}
-            unCheckedChildren={<FileTextOutlined />}
-          />
-        </Tooltip>
-        <Tooltip title="Let the agent use browser tools (read page, list tabs, click, type, navigate)">
-          <Switch
-            size="small"
-            aria-label="Agent tools"
-            checked={agentTools}
-            onChange={setAgentTools}
-            checkedChildren="Tools"
-            unCheckedChildren={<ToolOutlined />}
-          />
-        </Tooltip>
-        {agentTools && (
-          <Tooltip title="Run actions (click, type, navigate) without confirming each one">
-            <Switch
-              size="small"
-              aria-label="Auto-run actions"
-              checked={autoApprove}
-              onChange={setAutoApprove}
-              checkedChildren="Auto"
-              unCheckedChildren="Ask"
-            />
-          </Tooltip>
-        )}
-        {onDeviceSupported && (
-          <Tooltip title="Answer on-device with Chrome's built-in AI (private, no network)">
-            <Switch
-              size="small"
-              aria-label="Use on-device AI"
-              checked={onDevice}
-              onChange={setOnDevice}
-              checkedChildren="On-device"
-              unCheckedChildren={<RobotOutlined />}
-            />
-          </Tooltip>
-        )}
-        <Button size="small" icon={<EditOutlined />} onClick={newChat} className="new-chat">
-          New chat
-        </Button>
-      </div>
+      </header>
 
       <div className="messages">
         {messages.length === 0 ? (
           <div className="welcome">
             <Welcome
               variant="borderless"
+              icon={<RobotOutlined />}
               title="Hermes Agent"
-              description="Ask anything, or attach the current page as context."
+              description={
+                configured
+                  ? 'Ask anything, attach the page, or let the agent use your browser.'
+                  : 'Open Settings to connect to your Hermes server.'
+              }
             />
             <Prompts
               title="Try"
               items={SUGGESTIONS}
+              wrap
               onItemClick={(info) => setInput(String(info.data.label))}
             />
           </div>
@@ -161,10 +133,10 @@ export function ChatView() {
       </div>
 
       {pendingConfirm && (
-        <div className="confirm-card">
+        <div className="confirm-card" role="alertdialog" aria-label="Confirm action">
+          <WarningOutlined className="confirm-ico" />
           <div className="confirm-text">
-            Allow <b>{pendingConfirm.tool}</b>
-            <span className="confirm-args">{pendingConfirm.args}</span>?
+            Allow the agent to: <b>{actionSummary(pendingConfirm.tool, pendingConfirm.args)}</b>?
           </div>
           <div className="confirm-actions">
             <Button size="small" onClick={() => resolveConfirm(false)}>
@@ -176,6 +148,52 @@ export function ChatView() {
           </div>
         </div>
       )}
+
+      <div className="chip-row">
+        <ToggleChip
+          label="Run"
+          ariaLabel="Run mode"
+          icon={<ThunderboltOutlined />}
+          active={mode === 'run'}
+          onChange={(v) => setMode(v ? 'run' : 'chat')}
+          tooltip="Use the Runs API for long autonomous tasks"
+        />
+        <ToggleChip
+          label="Page"
+          ariaLabel="Attach page context"
+          icon={<FileTextOutlined />}
+          active={attachContext}
+          onChange={setAttachContext}
+          tooltip="Attach the current page's selection / content"
+        />
+        <ToggleChip
+          label="Tools"
+          ariaLabel="Agent tools"
+          icon={<ToolOutlined />}
+          active={agentTools}
+          onChange={setAgentTools}
+          tooltip="Let the agent use your browser (read page, click, type, navigate)"
+        />
+        {agentTools && (
+          <ToggleChip
+            label="Auto-run"
+            ariaLabel="Auto-run actions"
+            active={autoApprove}
+            onChange={setAutoApprove}
+            tooltip="Run actions without confirming each one"
+          />
+        )}
+        {onDeviceSupported && (
+          <ToggleChip
+            label="On-device"
+            ariaLabel="Use on-device AI"
+            icon={<RobotOutlined />}
+            active={onDevice}
+            onChange={setOnDevice}
+            tooltip="Answer locally with Chrome's built-in AI (no network)"
+          />
+        )}
+      </div>
 
       <div className="composer">
         <Sender
