@@ -41,6 +41,9 @@ describe('chat store', () => {
     sent.length = 0;
     useChatStore.setState({
       messages: [],
+      conversations: [],
+      conversationId: null,
+      system: '',
       input: '',
       streaming: false,
       models: [],
@@ -105,11 +108,73 @@ describe('chat store', () => {
     expect(useChatStore.getState().agentTools).toBe(false); // run switched tools off
   });
 
-  it('newChat clears the conversation and stops streaming', () => {
+  it('newChat starts a fresh draft and stops streaming (old chat is kept)', () => {
     useChatStore.getState().sendMessage('hi');
+    const firstConv = useChatStore.getState().conversationId;
     useChatStore.getState().newChat();
-    expect(useChatStore.getState().messages).toEqual([]);
-    expect(useChatStore.getState().streaming).toBe(false);
+    const s = useChatStore.getState();
+    expect(s.messages).toEqual([]);
+    expect(s.streaming).toBe(false);
+    expect(s.conversationId).toBeNull(); // draft until the next message
+    expect(s.conversations.map((c) => c.id)).toContain(firstConv); // not deleted
+  });
+
+  it('materializes a conversation on the first message, titled from it', () => {
+    useChatStore.getState().sendMessage('What is the Hermes Agent?\nmore detail');
+    const s = useChatStore.getState();
+    expect(s.conversationId).not.toBeNull();
+    expect(s.conversations).toHaveLength(1);
+    expect(s.conversations[0].title).toBe('What is the Hermes Agent?');
+  });
+
+  it('regenerate re-asks the last user message, replacing the answer', () => {
+    useChatStore.getState().sendMessage('question');
+    const id = startId();
+    onPortMessage({ type: 'chat.delta', requestId: id, content: 'bad answer' });
+    onPortMessage({ type: 'chat.done', requestId: id });
+
+    useChatStore.getState().regenerate();
+    const s = useChatStore.getState();
+    expect(s.streaming).toBe(true);
+    expect(s.messages.map((m) => m.role)).toEqual(['user', 'assistant']);
+    expect(s.messages[1].content).toBe(''); // old answer replaced by a fresh turn
+    expect(sent.filter((m) => m.type === 'chat.start')).toHaveLength(2);
+  });
+
+  it('deleteMessage removes a single message', () => {
+    useChatStore.getState().sendMessage('one');
+    const id = startId();
+    onPortMessage({ type: 'chat.delta', requestId: id, content: 'answer' });
+    onPortMessage({ type: 'chat.done', requestId: id });
+
+    useChatStore.getState().deleteMessage(1);
+    expect(useChatStore.getState().messages.map((m) => m.content)).toEqual(['one']);
+  });
+
+  it('sends the system prompt ahead of the history', () => {
+    useChatStore.getState().setSystem('Be terse.');
+    useChatStore.getState().sendMessage('hi');
+    const start = sent.find((m) => m.type === 'chat.start') as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    expect(start.messages[0]).toEqual({ role: 'system', content: 'Be terse.' });
+    expect(start.messages[1]).toEqual({ role: 'user', content: 'hi' });
+    // The system prompt is stored on the conversation meta, not in the history.
+    expect(useChatStore.getState().messages.map((m) => m.role)).toEqual(['user', 'assistant']);
+    expect(useChatStore.getState().conversations[0].system).toBe('Be terse.');
+  });
+
+  it('rename and delete update the conversation list', async () => {
+    useChatStore.getState().sendMessage('first');
+    const convId = useChatStore.getState().conversationId!;
+    useChatStore.getState().renameConversation(convId, 'My chat');
+    expect(useChatStore.getState().conversations[0].title).toBe('My chat');
+
+    await useChatStore.getState().deleteConversation(convId);
+    const s = useChatStore.getState();
+    expect(s.conversations).toHaveLength(0);
+    expect(s.conversationId).toBeNull();
+    expect(s.messages).toEqual([]);
   });
 
   it('clears streaming and flags the interruption when the port drops mid-stream', () => {

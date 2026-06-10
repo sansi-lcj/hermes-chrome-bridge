@@ -1,10 +1,46 @@
-import { describe, expect, it } from 'vitest';
-import { MAX_STORED_MESSAGES, trimConversation } from './conversation';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const store: Record<string, unknown> = {};
+vi.stubGlobal('chrome', {
+  storage: {
+    local: {
+      get: vi.fn(async (keys: string | string[]) => {
+        const arr = Array.isArray(keys) ? keys : [keys];
+        const out: Record<string, unknown> = {};
+        for (const k of arr) if (k in store) out[k] = store[k];
+        return out;
+      }),
+      set: vi.fn(async (obj: Record<string, unknown>) => {
+        Object.assign(store, obj);
+      }),
+      remove: vi.fn(async (key: string) => {
+        delete store[key];
+      }),
+    },
+  },
+});
+
+const {
+  MAX_STORED_MESSAGES,
+  MAX_TITLE_CHARS,
+  emptyIndex,
+  loadIndex,
+  loadMessages,
+  removeMessages,
+  saveIndex,
+  saveMessages,
+  titleFrom,
+  trimConversation,
+} = await import('./conversation');
 import type { StoredMessage } from './conversation';
 
 const msg = (content: string, role: StoredMessage['role'] = 'user'): StoredMessage => ({
   role,
   content,
+});
+
+beforeEach(() => {
+  for (const k of Object.keys(store)) delete store[k];
 });
 
 describe('trimConversation', () => {
@@ -23,5 +59,53 @@ describe('trimConversation', () => {
     const out = trimConversation(many);
     expect(out).toHaveLength(MAX_STORED_MESSAGES);
     expect(out[out.length - 1].content).toBe(`m${MAX_STORED_MESSAGES + 49}`);
+  });
+});
+
+describe('titleFrom', () => {
+  it('uses the first line, length-capped', () => {
+    expect(titleFrom('Hello world\nsecond line')).toBe('Hello world');
+    const long = 'x'.repeat(MAX_TITLE_CHARS + 10);
+    expect(titleFrom(long)).toHaveLength(MAX_TITLE_CHARS + 1); // + ellipsis
+    expect(titleFrom(long).endsWith('…')).toBe(true);
+  });
+});
+
+describe('conversation index', () => {
+  it('starts empty (and a null account is always empty)', async () => {
+    expect(await loadIndex('acc-1')).toEqual(emptyIndex());
+    expect(await loadIndex(null)).toEqual(emptyIndex());
+  });
+
+  it('round-trips an index and per-conversation messages', async () => {
+    const index = {
+      conversations: [{ id: 'c-1', title: 'First', updatedAt: 1 }],
+      activeId: 'c-1',
+    };
+    await saveIndex('acc-1', index);
+    await saveMessages('acc-1', 'c-1', [msg('hi'), msg('there', 'assistant')]);
+
+    expect(await loadIndex('acc-1')).toEqual(index);
+    expect(await loadMessages('acc-1', 'c-1')).toHaveLength(2);
+    // Conversations are isolated per id and per account.
+    expect(await loadMessages('acc-1', 'c-2')).toEqual([]);
+    expect(await loadMessages('acc-2', 'c-1')).toEqual([]);
+
+    await removeMessages('acc-1', 'c-1');
+    expect(await loadMessages('acc-1', 'c-1')).toEqual([]);
+  });
+
+  it('migrates a 1.8.x single conversation into a one-entry list', async () => {
+    store['conv:acc-1'] = [msg('What is Hermes?'), msg('An agent.', 'assistant')];
+
+    const index = await loadIndex('acc-1');
+    expect(index.conversations).toHaveLength(1);
+    expect(index.conversations[0].title).toBe('What is Hermes?');
+    expect(index.activeId).toBe(index.conversations[0].id);
+    // Messages carried over under the new key; legacy blob removed.
+    expect(await loadMessages('acc-1', index.activeId)).toHaveLength(2);
+    expect(store['conv:acc-1']).toBeUndefined();
+    // The migrated index is persisted (second load shows the same id).
+    expect((await loadIndex('acc-1')).activeId).toBe(index.activeId);
   });
 });

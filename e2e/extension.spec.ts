@@ -106,3 +106,31 @@ test('multi-account: switch accounts with isolated chat history', async ({ page,
   await page.getByRole('option', { name: 'Alpha' }).click();
   await expect(page.getByText('hi from alpha')).toBeVisible();
 });
+
+test('conversations: new chat keeps the old one; switching back restores it', async ({
+  page,
+  extensionId,
+}) => {
+  await configure(page, extensionId);
+  await gotoChat(page);
+  const composer = page.getByPlaceholder(/Message the agent/);
+  const messages = page.locator('.messages');
+
+  await composer.fill('first question');
+  await composer.press('Enter');
+  await expect(messages.getByText(STREAMED_ANSWER)).toBeVisible();
+
+  // New chat clears the panel but keeps the old conversation in the list.
+  await page.getByLabel('New chat').click();
+  await expect(messages.getByText('first question')).toHaveCount(0);
+  await composer.fill('second question');
+  await composer.press('Enter');
+  await expect(messages.getByText(STREAMED_ANSWER)).toBeVisible();
+
+  // Switch back through the conversations drawer (titled from the first message).
+  // Click the title text itself — the row also carries a rename pencil.
+  await page.getByLabel('Conversations').click();
+  await page.getByLabel('Open conversation first question').getByText('first question').click();
+  await expect(messages.getByText('first question')).toBeVisible();
+  await expect(messages.getByText('second question')).toHaveCount(0);
+});

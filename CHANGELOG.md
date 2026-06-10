@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.9.0
+
+A Chatbox-style assistant: full conversation management plus the message-level
+ergonomics you expect from a desktop AI chat client.
+
+### Added
+
+- **Multiple conversations per account** — a Conversations drawer (header
+  button) lists every chat, most recent first; **New chat** starts a fresh
+  draft instead of wiping history. Conversations are **auto-titled** from the
+  first message, **renamable** inline (pencil), and **deletable**; drafts only
+  materialize in storage once you actually send something.
+- **Per-message actions** — copy any message; **regenerate** the last answer
+  (re-asks the same question in place); delete a single message.
+- **Per-conversation system prompt** — a header popover (robot icon, accented
+  when set) edits instructions sent ahead of every message of that chat; the
+  prompt is stored with the conversation, not in the visible history.
+- **Code-block Copy button** — fenced code in answers gets a hover Copy button.
+- **Migration**: each account's 1.8.x single conversation becomes the first
+  entry of its conversation list automatically.
+- Tests: conversation index round-trip/migration/auto-titling, regenerate,
+  message deletion, system-prompt payload, rename/delete, code-copy button,
+  and an E2E that switches between two conversations.
+
+### Changed
+
+- Conversation storage moved from one blob per account (`conv:<accountId>`) to
+  an index + per-conversation messages (`convidx:`, `conv:<accountId>:<id>`).
+- The brand accent is now also exposed to the stylesheet as `--accent`.
+
 ## 1.8.1
 
 Code-audit release: every finding from a full clean-code/best-practices review,

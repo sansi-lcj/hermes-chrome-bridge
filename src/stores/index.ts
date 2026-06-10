@@ -4,7 +4,7 @@
 
 import { shallow } from 'zustand/shallow';
 import { onAccountsChanged } from '../lib/accounts';
-import { saveConversation } from '../lib/conversation';
+import { saveMessages } from '../lib/conversation';
 import {
   getConversationAccountId,
   initChat,
@@ -73,14 +73,15 @@ export function initStores(): void {
     },
   );
 
-  // Persist the conversation whenever a turn completes — under the account the
-  // messages belong to (not the currently active one, which may already have
-  // changed mid-stream during an account switch).
+  // Persist messages whenever a turn completes (or one is deleted) — under the
+  // account/conversation the messages belong to. conversationId and messages
+  // are always set together, so this pair can never mix two conversations; a
+  // null conversationId is an unmaterialized draft with nothing to save.
   useChatStore.subscribe(
-    (s) => ({ streaming: s.streaming, messages: s.messages }),
-    ({ streaming, messages }) => {
-      if (!streaming && messages.length > 0) {
-        void saveConversation(getConversationAccountId(), messages);
+    (s) => ({ streaming: s.streaming, messages: s.messages, conversationId: s.conversationId }),
+    ({ streaming, messages, conversationId }) => {
+      if (!streaming && conversationId) {
+        void saveMessages(getConversationAccountId(), conversationId, messages);
       }
     },
     { equalityFn: shallow },
