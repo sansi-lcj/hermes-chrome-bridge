@@ -10,7 +10,10 @@ The UI is built on **[Ant Design X](https://x.ant.design/)** — Ant Design's co
 
 - **Side-panel chat** on Ant Design X with live token streaming (SSE), **Markdown rendering** (code blocks with one-click copy, lists, links), and a `ThoughtChain` tool-progress trail.
 - **Conversations, Chatbox-style** — every account keeps a full conversation list (auto-titled, renamable, deletable) in a drawer; **New chat** starts fresh without losing anything, and history survives closing the panel.
-- **Message actions** — copy any message, **regenerate** the last answer, or delete a turn.
+- **Message actions** — copy any message, **edit & resend** a past question, **regenerate** the last answer, or delete a turn.
+- **Conversation search** — filter the drawer across titles and message content; **export** any conversation as Markdown or JSON.
+- **Quick commands** — type `/name` in the composer to insert reusable prompt templates with `{{selection}}`, `{{page}}`, `{{url}}`, `{{clipboard}}`, and `{{input}}` variables (managed in Settings).
+- **Voice input** — dictate into the composer where the browser supports speech recognition.
 - **Per-conversation system prompt** — set standing instructions from the header; they ride ahead of every message of that chat.
 - **Page context** — attach the current tab's selection or readable text to your message.
 - **Runs mode** — drive long, autonomous tasks via the `/v1/runs` API. Runs keep going even if you close the panel and notify you when finished.

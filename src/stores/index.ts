@@ -14,12 +14,14 @@ import {
 } from './chat';
 import { useCatalogStore } from './catalog';
 import { isConfigured, useSettingsStore } from './settings';
+import { useTemplatesStore } from './templates';
 import { useUiStore } from './ui';
 
 export { useChatStore } from './chat';
 export { useCatalogStore } from './catalog';
 export { useSettingsStore } from './settings';
 export { useSettingsFormStore } from './settingsForm';
+export { useTemplatesStore } from './templates';
 export { useUiStore } from './ui';
 export type { Tab } from './ui';
 
@@ -89,4 +91,5 @@ export function initStores(): void {
 
   initChat();
   void useSettingsStore.getState().load();
+  void useTemplatesStore.getState().load();
 }

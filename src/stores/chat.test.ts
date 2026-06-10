@@ -52,6 +52,9 @@ describe('chat store', () => {
       onDeviceSupported: false,
       mode: 'chat',
       model: 'hermes',
+      searchQuery: '',
+      searchHits: null,
+      recording: false,
     });
   });
 
@@ -175,6 +178,49 @@ describe('chat store', () => {
     expect(s.conversations).toHaveLength(0);
     expect(s.conversationId).toBeNull();
     expect(s.messages).toEqual([]);
+  });
+
+  it('editMessage rewrites a user turn and re-asks from there', () => {
+    useChatStore.getState().sendMessage('first question');
+    const id = startId();
+    onPortMessage({ type: 'chat.delta', requestId: id, content: 'first answer' });
+    onPortMessage({ type: 'chat.done', requestId: id });
+    sent.length = 0;
+
+    useChatStore.getState().editMessage(0, 'edited question');
+    const s = useChatStore.getState();
+    expect(s.messages.map((m) => m.content)).toEqual(['edited question', '']);
+    expect(s.streaming).toBe(true);
+    const start = sent.find((m) => m.type === 'chat.start') as {
+      messages: Array<{ content: string }>;
+    };
+    expect(start.messages.at(-1)?.content).toBe('edited question');
+  });
+
+  it('editMessage ignores a non-user index', () => {
+    useChatStore.getState().sendMessage('q');
+    const id = startId();
+    onPortMessage({ type: 'chat.delta', requestId: id, content: 'a' });
+    onPortMessage({ type: 'chat.done', requestId: id });
+    useChatStore.getState().editMessage(1, 'nope'); // index 1 is the assistant turn
+    expect(useChatStore.getState().messages[1].content).toBe('a');
+  });
+
+  it('setSearchQuery clears hits on an empty query', () => {
+    useChatStore.getState().setSearchQuery('   ');
+    expect(useChatStore.getState().searchHits).toBeNull();
+    expect(useChatStore.getState().searchQuery).toBe('   ');
+  });
+
+  it('applyTemplate expands {{input}} into the composer, stripping the command', async () => {
+    useChatStore.setState({ input: '/sum extra words' });
+    await useChatStore.getState().applyTemplate({
+      id: 't',
+      name: 'sum',
+      description: '',
+      body: 'Summarize: {{input}}',
+    });
+    expect(useChatStore.getState().input).toBe('Summarize: extra words');
   });
 
   it('clears streaming and flags the interruption when the port drops mid-stream', () => {

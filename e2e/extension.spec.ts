@@ -134,3 +134,31 @@ test('conversations: new chat keeps the old one; switching back restores it', as
   await expect(messages.getByText('first question')).toBeVisible();
   await expect(messages.getByText('second question')).toHaveCount(0);
 });
+
+test('quick commands: a "/" template expands into the composer', async ({ page, extensionId }) => {
+  await configure(page, extensionId);
+  await gotoChat(page);
+
+  const composer = page.getByPlaceholder(/Message the agent/);
+  await composer.fill('/translate');
+  // The command menu lists the seeded starter templates.
+  await expect(page.getByRole('option', { name: /\/translate/ })).toBeVisible();
+  await page.getByRole('option', { name: /\/translate/ }).click();
+  // The body expands into the composer (no page selection, so it's the shell).
+  await expect(composer).toHaveValue(/Translate to English/);
+});
+
+test('conversation search filters the drawer to matches', async ({ page, extensionId }) => {
+  await configure(page, extensionId);
+  await gotoChat(page);
+  const composer = page.getByPlaceholder(/Message the agent/);
+  await composer.fill('tell me about quokkas');
+  await composer.press('Enter');
+  await expect(page.locator('.messages').getByText(STREAMED_ANSWER)).toBeVisible();
+
+  await page.getByLabel('Conversations').click();
+  await page.getByLabel('Search conversations').fill('quokka');
+  await expect(page.getByLabel(/Open conversation tell me about quokkas/)).toBeVisible();
+  await page.getByLabel('Search conversations').fill('nonexistent-xyz');
+  await expect(page.getByText('No matches')).toBeVisible();
+});

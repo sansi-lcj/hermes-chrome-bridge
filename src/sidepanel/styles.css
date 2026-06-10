@@ -144,6 +144,56 @@ body {
 }
 .composer {
   padding: 10px;
+  position: relative;
+}
+
+/* Quick-command ("/") menu floating above the composer */
+.cmd-menu {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: calc(100% - 4px);
+  max-height: 220px;
+  overflow-y: auto;
+  background: #2a2a2a;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  padding: 4px;
+  z-index: 5;
+}
+.cmd-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  color: inherit;
+}
+.cmd-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.cmd-name {
+  font-weight: 600;
+  color: var(--accent, #5865f2);
+}
+.cmd-desc {
+  font-size: 12px;
+  opacity: 0.7;
+}
+.mic.recording {
+  color: #ff6b6b;
+}
+.edit-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 260px;
 }
 
 /* Generic scrollable panes (skills / sessions / settings) */
@@ -268,9 +318,24 @@ body {
   border-color: rgba(88, 101, 242, 0.8);
   background: rgba(88, 101, 242, 0.1);
 }
-.conv-title {
+.conv-main {
   flex: 1;
   min-width: 0;
+}
+.conv-title {
+  width: 100%;
+}
+.conv-snippet {
+  font-size: 11px;
+  opacity: 0.55;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.conv-actions {
+  display: flex;
+  flex: none;
 }
 
 /* Per-message actions (copy / regenerate / delete) */

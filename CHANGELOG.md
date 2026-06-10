@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.10.0
+
+Chat-power features (Phase 1 of the feature roadmap): the composer and
+conversation ergonomics you'd expect from a desktop AI client — no new
+permissions.
+
+### Added
+
+- **Quick commands** — type `/name` in the composer to insert reusable prompt
+  templates. Bodies interpolate `{{selection}}`, `{{page}}`, `{{url}}`,
+  `{{title}}`, `{{clipboard}}` and `{{input}}` (the page context / clipboard are
+  fetched only when referenced). Managed in Settings; seeded with
+  summarize/explain/translate starters.
+- **Conversation search** — a search box in the Conversations drawer filters by
+  title and message content, with a snippet around the first hit.
+- **Export** — download any conversation as Markdown or JSON from the drawer.
+- **Edit & resend** — edit a past user message and re-ask from there (drops the
+  turns below), via a popover on the message.
+- **Voice input** — a mic button dictates into the composer via the Web Speech
+  API (feature-detected; hidden where unsupported).
+- Tests: template variable detection/rendering/matching, export
+  Markdown/JSON/filename, conversation search + snippet, store actions for edit,
+  search and template expansion, plus E2E for the `/` menu and drawer search.
+
+### Changed
+
+- The composer and conversation drawer are now their own components
+  (`Composer`, `ConversationsDrawer`); the brand accent is exposed to CSS as
+  `--accent`.
+
 ## 1.9.0
 
 A Chatbox-style assistant: full conversation management plus the message-level

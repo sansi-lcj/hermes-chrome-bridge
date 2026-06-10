@@ -29,6 +29,8 @@ const {
   removeMessages,
   saveIndex,
   saveMessages,
+  searchConversations,
+  snippetAround,
   titleFrom,
   trimConversation,
 } = await import('./conversation');
@@ -107,5 +109,44 @@ describe('conversation index', () => {
     expect(store['conv:acc-1']).toBeUndefined();
     // The migrated index is persisted (second load shows the same id).
     expect((await loadIndex('acc-1')).activeId).toBe(index.activeId);
+  });
+});
+
+describe('snippetAround', () => {
+  it('frames the first match with ellipses', () => {
+    const filler = 'word '.repeat(20); // 100 chars, pushes the match past the radius
+    const text = `${filler}TARGET ${filler}`;
+    const snip = snippetAround(text, 'TARGET');
+    expect(snip).toContain('TARGET');
+    expect(snip.startsWith('…')).toBe(true);
+    expect(snip.endsWith('…')).toBe(true);
+    expect(snip.length).toBeLessThan(text.length);
+  });
+});
+
+describe('searchConversations', () => {
+  it('matches titles and message content, with snippets', async () => {
+    const index = {
+      conversations: [
+        { id: 'c1', title: 'Rust ownership', updatedAt: 2 },
+        { id: 'c2', title: 'Cooking pasta', updatedAt: 1 },
+      ],
+      activeId: 'c1',
+    };
+    await saveIndex('acc-1', index);
+    await saveMessages('acc-1', 'c1', [msg('explain the borrow checker')]);
+    await saveMessages('acc-1', 'c2', [msg('how long to boil spaghetti')]);
+
+    // Title match.
+    expect((await searchConversations('acc-1', index, 'rust')).map((h) => h.id)).toEqual(['c1']);
+    // Content match returns a snippet, not the title.
+    const hits = await searchConversations('acc-1', index, 'borrow');
+    expect(hits.map((h) => h.id)).toEqual(['c1']);
+    expect(hits[0].snippet).toContain('borrow');
+    // No match.
+    expect(await searchConversations('acc-1', index, 'zzz')).toEqual([]);
+    // Empty query / null account short-circuit.
+    expect(await searchConversations('acc-1', index, '  ')).toEqual([]);
+    expect(await searchConversations(null, index, 'rust')).toEqual([]);
   });
 });
