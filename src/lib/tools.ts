@@ -18,6 +18,10 @@ export interface ToolDef {
 
 const noParams = { type: 'object', properties: {}, additionalProperties: false };
 
+/** Cap page text / element counts so tool results stay model-prompt sized. */
+const PAGE_TEXT_CAP = 4000;
+const MAX_ELEMENTS = 80;
+
 async function activeTabId(): Promise<number> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab?.id == null) throw new Error('No active tab.');
@@ -26,8 +30,11 @@ async function activeTabId(): Promise<number> {
 
 /** Message the active tab's content script, with a friendly error off-limits pages. */
 async function toContent<T>(message: Record<string, unknown>): Promise<T> {
+  // Resolve the tab first so its errors ("No active tab.") keep their own
+  // message instead of being misattributed to a missing content script.
+  const tabId = await activeTabId();
   try {
-    return (await chrome.tabs.sendMessage(await activeTabId(), message)) as T;
+    return (await chrome.tabs.sendMessage(tabId, message)) as T;
   } catch {
     throw new Error('Cannot reach this page (no content script — e.g. a chrome:// or store page).');
   }
@@ -49,7 +56,11 @@ export const TOOLS: ToolDef[] = [
     parameters: noParams,
     execute: async () => {
       const ctx = await toContent<PageContext>({ type: 'getPageContext' });
-      return JSON.stringify({ title: ctx.title, url: ctx.url, text: ctx.text.slice(0, 4000) });
+      return JSON.stringify({
+        title: ctx.title,
+        url: ctx.url,
+        text: ctx.text.slice(0, PAGE_TEXT_CAP),
+      });
     },
   },
   {
@@ -59,7 +70,7 @@ export const TOOLS: ToolDef[] = [
     parameters: noParams,
     execute: async () => {
       const els = await toContent<ElementInfo[]>({ type: 'getInteractiveElements' });
-      return JSON.stringify(els.slice(0, 80));
+      return JSON.stringify(els.slice(0, MAX_ELEMENTS));
     },
   },
   {

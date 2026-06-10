@@ -64,28 +64,29 @@ function scrollPage(direction: 'up' | 'down'): unknown {
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  try {
+  const handle = (): unknown => {
     switch (message?.type) {
       case 'getPageContext':
-        sendResponse(collect());
-        return true;
+        return collect();
       case 'getInteractiveElements':
-        sendResponse(scanElements());
-        return true;
+        return scanElements();
       case 'clickElement':
-        sendResponse(clickElement(message.index));
-        return true;
+        return clickElement(message.index);
       case 'typeText':
-        sendResponse(typeText(message.index, message.text));
-        return true;
+        return typeText(message.index, message.text);
       case 'scrollPage':
-        sendResponse(scrollPage(message.direction));
-        return true;
+        return scrollPage(message.direction);
       default:
-        return false;
+        return undefined;
     }
+  };
+  try {
+    const result = handle();
+    if (result !== undefined) sendResponse(result);
   } catch (e) {
     sendResponse({ error: String(e) });
-    return true;
   }
+  // Every handler responds synchronously, so no async channel is kept open
+  // (returning true is reserved for listeners that respond later).
+  return false;
 });

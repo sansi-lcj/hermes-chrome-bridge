@@ -9,8 +9,8 @@
 // - Gathers page context from the active tab's content script.
 
 import { ConfirmBroker } from '../lib/confirmBroker';
-import { HermesClient, HermesError } from '../lib/hermesClient';
-import { setPendingPrompt } from '../lib/pending';
+import { HermesClient } from '../lib/hermesClient';
+import { setPendingNewChat, setPendingPrompt } from '../lib/pending';
 import { addRun, listRuns, removeRun } from '../lib/runRegistry';
 import { getSettings } from '../lib/storage';
 import { createGuardedRunner, runTool, toolSpecs } from '../lib/tools';
@@ -21,12 +21,17 @@ import type {
   ChatStartRequest,
   PageContext,
   PanelBroadcast,
+  RunEvent,
   UiToBackground,
 } from '../lib/types';
 
 const PORT_NAME = 'hermes';
 const MENU_ASK = 'hermes-ask-selection';
 const MENU_SUMMARIZE = 'hermes-summarize-page';
+/** Tool-call args shown in the progress trail are truncated to this length. */
+const ARGS_PREVIEW_CHARS = 120;
+/** Desktop notifications show at most this much of the Run's answer. */
+const NOTIFY_SNIPPET_CHARS = 180;
 
 async function client(): Promise<HermesClient> {
   return new HermesClient(await getSettings());
@@ -133,93 +138,123 @@ chrome.runtime.onConnect.addListener((port) => {
   });
 });
 
+/** Dispatch one chat request to the matching streaming strategy. */
 async function runStream(
   req: ChatStartRequest,
   controller: AbortController,
   channel: Channel,
 ): Promise<void> {
-  const { requestId, messages, model, useRun, useTools, autoApprove } = req;
   const hermes = await client();
   try {
-    if (useTools) {
-      const guardedRun = createGuardedRunner(
-        runTool,
-        (tool, args) => requestConfirm(channel, requestId, tool, args, controller.signal),
-        autoApprove,
-      );
-      for await (const ev of hermes.runToolLoop(
-        messages,
-        model,
-        toolSpecs(),
-        guardedRun,
-        controller.signal,
-      )) {
-        if (ev.kind === 'tool-call')
-          channel.post({
-            type: 'chat.tool',
-            requestId,
-            progress: { name: ev.name, message: `calling ${ev.name}(${ev.args.slice(0, 120)})` },
-          });
-        else if (ev.kind === 'tool-result')
-          channel.post({
-            type: 'chat.tool',
-            requestId,
-            progress: { name: ev.name, status: 'done' },
-          });
-        else if (ev.kind === 'final')
-          channel.post({ type: 'chat.delta', requestId, content: ev.content });
-      }
-      channel.post({ type: 'chat.done', requestId });
-      return;
-    }
-
-    if (useRun) {
-      const run = await hermes.createRun(messages, model);
-      await addRun(run.id, model); // survive a service-worker restart
-      try {
-        channel.post({
-          type: 'chat.tool',
-          requestId,
-          progress: { message: `Run started: ${run.id}` },
-        });
-        controller.signal.addEventListener('abort', () => void hermes.stopRun(run.id));
-
-        let answer = '';
-        for await (const ev of hermes.runEvents(run.id, controller.signal)) {
-          const text = extractRunText(ev.data);
-          if (text) {
-            answer += text;
-            channel.post({ type: 'chat.delta', requestId, content: text });
-          } else {
-            channel.post({
-              type: 'chat.tool',
-              requestId,
-              progress: { message: ev.event ?? 'event' },
-            });
-          }
-        }
-        channel.post({ type: 'chat.done', requestId });
-        // If the panel closed mid-run, ping the user that it finished.
-        if (!channel.alive) notifyRunDone(answer);
-      } finally {
-        await removeRun(run.id);
-      }
-      return;
-    }
-
-    for await (const ev of hermes.chatStream(messages, model, controller.signal)) {
-      if (ev.kind === 'delta') channel.post({ type: 'chat.delta', requestId, content: ev.content });
-      else if (ev.kind === 'tool')
-        channel.post({ type: 'chat.tool', requestId, progress: ev.progress });
-      else if (ev.kind === 'done') channel.post({ type: 'chat.done', requestId });
-    }
+    if (req.useTools) await streamWithTools(hermes, req, controller, channel);
+    else if (req.useRun) await streamRun(hermes, req, controller, channel);
+    else await streamChat(hermes, req, controller, channel);
   } catch (err) {
     if (controller.signal.aborted) {
-      channel.post({ type: 'chat.done', requestId });
+      channel.post({ type: 'chat.done', requestId: req.requestId });
       return;
     }
-    channel.post({ type: 'error', requestId, message: errorMessage(err) });
+    channel.post({ type: 'error', requestId: req.requestId, message: errorMessage(err) });
   }
+}
+
+/** Tool-use loop: the agent calls browser tools until it answers. */
+async function streamWithTools(
+  hermes: HermesClient,
+  req: ChatStartRequest,
+  controller: AbortController,
+  channel: Channel,
+): Promise<void> {
+  const { requestId, messages, model, autoApprove } = req;
+  const guardedRun = createGuardedRunner(
+    runTool,
+    (tool, args) => requestConfirm(channel, requestId, tool, args, controller.signal),
+    autoApprove,
+  );
+  for await (const ev of hermes.runToolLoop(
+    messages,
+    model,
+    toolSpecs(),
+    guardedRun,
+    controller.signal,
+  )) {
+    if (ev.kind === 'tool-call')
+      channel.post({
+        type: 'chat.tool',
+        requestId,
+        progress: {
+          name: ev.name,
+          message: `calling ${ev.name}(${ev.args.slice(0, ARGS_PREVIEW_CHARS)})`,
+        },
+      });
+    else if (ev.kind === 'tool-result')
+      channel.post({ type: 'chat.tool', requestId, progress: { name: ev.name, status: 'done' } });
+    else if (ev.kind === 'final')
+      channel.post({ type: 'chat.delta', requestId, content: ev.content });
+  }
+  channel.post({ type: 'chat.done', requestId });
+}
+
+/** Long task via the Runs API; survives panel close and notifies on finish. */
+async function streamRun(
+  hermes: HermesClient,
+  req: ChatStartRequest,
+  controller: AbortController,
+  channel: Channel,
+): Promise<void> {
+  const { requestId, messages, model } = req;
+  const run = await hermes.createRun(messages, model);
+  await addRun(run.id, model); // survive a service-worker restart
+  try {
+    channel.post({ type: 'chat.tool', requestId, progress: { message: `Run started: ${run.id}` } });
+    controller.signal.addEventListener('abort', () => void hermes.stopRun(run.id));
+
+    const answer = await pumpRunEvents(hermes, run.id, controller.signal, (text, ev) => {
+      if (text) channel.post({ type: 'chat.delta', requestId, content: text });
+      else
+        channel.post({ type: 'chat.tool', requestId, progress: { message: ev.event ?? 'event' } });
+    });
+    channel.post({ type: 'chat.done', requestId });
+    // If the panel closed mid-run, ping the user that it finished.
+    if (!channel.alive) notifyRunDone(answer);
+  } finally {
+    await removeRun(run.id);
+  }
+}
+
+/** Plain streaming chat completion. */
+async function streamChat(
+  hermes: HermesClient,
+  req: ChatStartRequest,
+  controller: AbortController,
+  channel: Channel,
+): Promise<void> {
+  const { requestId, messages, model } = req;
+  for await (const ev of hermes.chatStream(messages, model, controller.signal)) {
+    if (ev.kind === 'delta') channel.post({ type: 'chat.delta', requestId, content: ev.content });
+    else if (ev.kind === 'tool')
+      channel.post({ type: 'chat.tool', requestId, progress: ev.progress });
+    else if (ev.kind === 'done') channel.post({ type: 'chat.done', requestId });
+  }
+}
+
+/**
+ * Consume a Run's event stream, accumulating its text. Shared by live streaming
+ * (with a per-event callback) and orphan resumption (without).
+ */
+async function pumpRunEvents(
+  hermes: HermesClient,
+  runId: string,
+  signal: AbortSignal,
+  onEvent: (text: string | undefined, ev: RunEvent) => void = () => {},
+): Promise<string> {
+  let answer = '';
+  for await (const ev of hermes.runEvents(runId, signal)) {
+    const text = extractRunText(ev.data);
+    if (text) answer += text;
+    onEvent(text, ev);
+  }
+  return answer;
 }
 
 /** Best-effort extraction of streamed text from a Runs event payload. */
@@ -238,10 +273,19 @@ function extractRunText(data: unknown): string | undefined {
 // Context menus, commands, omnibox -> open panel with a pending prompt
 // ---------------------------------------------------------------------------
 
+// chrome.sidePanel.open() must run synchronously within the user gesture —
+// awaiting anything first can consume the gesture and make it throw. Handlers
+// without a tab (omnibox, notification click) use this tracked window id.
+let focusedWindowId: number | undefined;
+chrome.windows.onFocusChanged.addListener((windowId) => {
+  if (windowId !== chrome.windows.WINDOW_ID_NONE) focusedWindowId = windowId;
+});
+void chrome.windows.getLastFocused().then((win) => {
+  if (focusedWindowId == null && win?.id != null) focusedWindowId = win.id;
+});
+
 chrome.contextMenus.onClicked.addListener((info, tab) => {
-  // Open the panel synchronously so the user-gesture requirement for
-  // sidePanel.open() is satisfied before any await; then hand off the prompt.
-  openPanelSync(tab);
+  openPanelSync(tab?.windowId);
   void (async () => {
     if (info.menuItemId === MENU_ASK && info.selectionText) {
       await deliverPrompt(`About this text:\n\n"""\n${info.selectionText}\n"""\n`, false);
@@ -255,19 +299,18 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
 chrome.commands.onCommand.addListener((command, tab) => {
   if (command === 'open-panel') {
-    openPanelSync(tab);
+    openPanelSync(tab?.windowId);
   } else if (command === 'new-chat') {
-    openPanelSync(tab);
-    broadcast({ type: 'newChat' });
+    openPanelSync(tab?.windowId);
+    void deliverNewChat();
   }
 });
 
-chrome.omnibox.onInputEntered.addListener(async (text) => {
+chrome.omnibox.onInputEntered.addListener((text) => {
   const query = text.trim();
   if (!query) return;
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  openPanelSync(tab);
-  await deliverPrompt(query, true);
+  openPanelSync();
+  void deliverPrompt(query, true);
 });
 
 chrome.omnibox.setDefaultSuggestion({
@@ -284,21 +327,16 @@ async function deliverPrompt(text: string, autoSend: boolean): Promise<void> {
   broadcast({ type: 'pendingPrompt' });
 }
 
-/** Open the side panel synchronously within a user gesture (best-effort). */
-function openPanelSync(tab?: chrome.tabs.Tab): void {
-  const windowId = tab?.windowId;
-  if (windowId == null) return;
-  chrome.sidePanel.open({ windowId }).catch((err) => console.warn('sidePanel.open failed', err));
+/** Persist a new-chat request and poke any open panel (same pattern as above). */
+async function deliverNewChat(): Promise<void> {
+  await setPendingNewChat();
+  broadcast({ type: 'newChat' });
 }
 
-/** Open the side panel for the currently active window (notification click). */
-async function openPanel(): Promise<void> {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab?.windowId != null) {
-    await chrome.sidePanel
-      .open({ windowId: tab.windowId })
-      .catch((err) => console.warn('sidePanel.open failed', err));
-  }
+/** Open the side panel synchronously within a user gesture (best-effort). */
+function openPanelSync(windowId: number | undefined = focusedWindowId): void {
+  if (windowId == null) return;
+  chrome.sidePanel.open({ windowId }).catch((err) => console.warn('sidePanel.open failed', err));
 }
 
 function broadcast(msg: PanelBroadcast): void {
@@ -307,7 +345,7 @@ function broadcast(msg: PanelBroadcast): void {
 }
 
 function notifyRunDone(answer: string): void {
-  const snippet = answer.trim().slice(0, 180) || 'Your task finished.';
+  const snippet = answer.trim().slice(0, NOTIFY_SNIPPET_CHARS) || 'Your task finished.';
   chrome.notifications.create({
     type: 'basic',
     iconUrl: chrome.runtime.getURL('icons/icon-128.png'),
@@ -317,7 +355,7 @@ function notifyRunDone(answer: string): void {
   });
 }
 
-chrome.notifications.onClicked.addListener(() => void openPanel());
+chrome.notifications.onClicked.addListener(() => openPanelSync());
 
 // ---------------------------------------------------------------------------
 // Resume Runs orphaned by a service-worker restart
@@ -333,14 +371,8 @@ async function resumeOrphanedRuns(): Promise<void> {
 }
 
 async function resumeRun(hermes: HermesClient, runId: string): Promise<void> {
-  const controller = new AbortController();
-  let answer = '';
   try {
-    for await (const ev of hermes.runEvents(runId, controller.signal)) {
-      const text = extractRunText(ev.data);
-      if (text) answer += text;
-    }
-    notifyRunDone(answer);
+    notifyRunDone(await pumpRunEvents(hermes, runId, new AbortController().signal));
   } catch {
     /* run gone or unreachable — drop it */
   } finally {
@@ -372,14 +404,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 async function handleApi(req: ApiRequest): Promise<unknown> {
-  const hermes = await client();
+  // An explicit settings payload (e.g. Test connection on an unsaved form
+  // draft) overrides the active account's saved connection.
+  const hermes = new HermesClient(req.settings ?? (await getSettings()));
   switch (req.action) {
     case 'testConnection': {
-      // Health first; fall back to /v1/models for servers without /v1/health.
       try {
         await hermes.health();
       } catch {
-        await hermes.models();
+        /* older servers lack /v1/health — the models call below still verifies */
       }
       return { models: await hermes.models() };
     }
@@ -410,7 +443,5 @@ async function readPageContext(tabId?: number): Promise<PageContext> {
 }
 
 function errorMessage(err: unknown): string {
-  if (err instanceof HermesError) return err.message;
-  if (err instanceof Error) return err.message;
-  return String(err);
+  return err instanceof Error ? err.message : String(err);
 }

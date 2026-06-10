@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { message } from 'antd';
+import { feedback } from '../lib/feedback';
 import { sendRuntime } from '../lib/messaging';
 import { originPattern } from '../lib/url';
 import { DEFAULT_SETTINGS, type Account, type ChatMode, type ModelInfo } from '../lib/types';
@@ -27,28 +27,28 @@ interface SettingsFormState {
   test: () => Promise<void>;
 }
 
-/** Request the host permission and add/update the account; activate it. */
-async function persist(get: () => SettingsFormState): Promise<boolean> {
-  const { name, baseUrl, apiKey, defaultModel, mode, editingId } = get();
+/**
+ * Validate the URL and make sure the host permission is granted (required for
+ * the background worker to reach the server at all). Pure side effect on the
+ * browser's permission state — does not touch the accounts store.
+ */
+async function ensureHostPermission(baseUrl: string): Promise<boolean> {
   const origin = originPattern(baseUrl);
   if (!origin) {
-    message.error('Enter a valid http(s) URL.');
+    feedback.error('Enter a valid http(s) URL.');
     return false;
   }
-  const granted = await chrome.permissions.request({ origins: [origin] }).catch(() => false);
+  let granted: boolean;
+  try {
+    granted = await chrome.permissions.request({ origins: [origin] });
+  } catch (err) {
+    feedback.error(`Host permission request failed: ${String(err)}`);
+    return false;
+  }
   if (!granted) {
-    message.warning(`Host permission for ${origin} was not granted; requests will fail.`);
-    return false;
+    feedback.warning(`Host permission for ${origin} was not granted; requests will fail.`);
   }
-  const store = useSettingsStore.getState();
-  const payload = { name: name.trim() || 'Account', baseUrl, apiKey, defaultModel, mode };
-  if (editingId) {
-    await store.updateAccount(editingId, payload);
-    await store.setActive(editingId);
-  } else {
-    await store.addAccount(payload);
-  }
-  return true;
+  return granted;
 }
 
 const blank = {
@@ -84,30 +84,42 @@ export const useSettingsFormStore = create<SettingsFormState>((set, get) => ({
   setDefaultModel: (defaultModel) => set({ defaultModel }),
   setMode: (mode) => set({ mode }),
 
+  /** Persist the account (add or update) and activate it. */
   save: async () => {
+    const { name, baseUrl, apiKey, defaultModel, mode, editingId } = get();
     set({ busy: true });
     try {
-      if (await persist(get)) {
-        message.success('Saved.');
-        set({ visible: false });
+      if (!(await ensureHostPermission(baseUrl))) return;
+      const store = useSettingsStore.getState();
+      const payload = { name: name.trim() || 'Account', baseUrl, apiKey, defaultModel, mode };
+      if (editingId) {
+        await store.updateAccount(editingId, payload);
+        await store.setActive(editingId);
+      } else {
+        await store.addAccount(payload);
       }
+      feedback.success('Saved.');
+      set({ visible: false });
     } finally {
       set({ busy: false });
     }
   },
 
+  /** Probe the connection the form describes — without saving anything. */
   test: async () => {
+    const { baseUrl, apiKey, defaultModel, mode } = get();
     set({ busy: true });
     try {
-      if (!(await persist(get))) return;
+      if (!(await ensureHostPermission(baseUrl))) return;
       const data = await sendRuntime<{ models: ModelInfo[] }>({
         type: 'api',
         action: 'testConnection',
+        settings: { baseUrl, apiKey, defaultModel, mode },
       });
       const names = data.models?.map((m) => m.id).join(', ') || 'none';
-      message.success(`Connected. Models: ${names}`);
+      feedback.success(`Connected. Models: ${names}`);
     } catch (err) {
-      message.error(String(err));
+      feedback.error(String(err));
     } finally {
       set({ busy: false });
     }

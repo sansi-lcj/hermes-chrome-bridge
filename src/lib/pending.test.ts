@@ -16,7 +16,8 @@ vi.stubGlobal('chrome', {
   },
 });
 
-const { setPendingPrompt, takePendingPrompt } = await import('./pending');
+const { setPendingPrompt, takePendingPrompt, setPendingNewChat, takePendingNewChat } =
+  await import('./pending');
 
 describe('pending prompt', () => {
   beforeEach(() => {
@@ -37,5 +38,21 @@ describe('pending prompt', () => {
     expect(await takePendingPrompt()).toEqual({ text: 'once', autoSend: false });
     // A second consumer (e.g. the broadcast poke racing the mount read) gets nothing.
     expect(await takePendingPrompt()).toBeNull();
+  });
+});
+
+describe('pending new-chat', () => {
+  beforeEach(() => {
+    for (const k of Object.keys(store)) delete store[k];
+  });
+
+  it('is false when nothing is pending', async () => {
+    expect(await takePendingNewChat()).toBe(false);
+  });
+
+  it('survives until consumed, exactly once', async () => {
+    await setPendingNewChat();
+    expect(await takePendingNewChat()).toBe(true);
+    expect(await takePendingNewChat()).toBe(false);
   });
 });

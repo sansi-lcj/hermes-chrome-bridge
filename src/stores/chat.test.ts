@@ -83,6 +83,28 @@ describe('chat store', () => {
     expect(sent.filter((m) => m.type === 'chat.start')).toHaveLength(1);
   });
 
+  it('does not double-send while the page-context fetch is in flight', async () => {
+    (chrome.runtime.sendMessage as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      data: { url: 'https://x', title: 'T', selection: '', text: 'body' },
+    });
+    useChatStore.setState({ attachContext: true });
+    // Both submits land before the async context fetch resolves.
+    useChatStore.getState().sendMessage('first');
+    useChatStore.getState().sendMessage('first again');
+    await vi.waitFor(() => {
+      expect(sent.filter((m) => m.type === 'chat.start')).toHaveLength(1);
+    });
+  });
+
+  it('keeps Run mode and Agent tools mutually exclusive', () => {
+    useChatStore.getState().setMode('run');
+    useChatStore.getState().setAgentTools(true);
+    expect(useChatStore.getState().mode).toBe('chat'); // tools switched run off
+    useChatStore.getState().setMode('run');
+    expect(useChatStore.getState().agentTools).toBe(false); // run switched tools off
+  });
+
   it('newChat clears the conversation and stops streaming', () => {
     useChatStore.getState().sendMessage('hi');
     useChatStore.getState().newChat();

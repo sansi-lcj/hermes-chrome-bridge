@@ -30,6 +30,10 @@ export default defineManifest({
   side_panel: {
     default_path: 'src/sidepanel/index.html',
   },
+  // Statically injected (a deliberate trade-off): Page context and the agent's
+  // perception/action tools must work on tabs that were already open, where an
+  // on-demand scripting.executeScript would need a per-tab activeTab gesture.
+  // The script is small, lazy (document_idle) and only reacts to messages.
   content_scripts: [
     {
       matches: ['<all_urls>'],

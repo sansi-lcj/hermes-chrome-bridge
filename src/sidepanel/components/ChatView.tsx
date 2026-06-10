@@ -9,6 +9,7 @@ import {
 } from '@ant-design/icons';
 import { Bubble, Prompts, Sender, ThoughtChain, Welcome } from '@ant-design/x';
 import type { BubbleItemType, BubbleListProps } from '@ant-design/x';
+import { useShallow } from 'zustand/react/shallow';
 import { actionSummary } from '../../lib/actionSummary';
 import { useChatStore, useSettingsStore } from '../../stores';
 import { Markdown } from './Markdown';
@@ -31,47 +32,55 @@ const ROLE: BubbleListProps['role'] = {
 };
 
 export function ChatView() {
-  const messages = useChatStore((s) => s.messages);
-  const input = useChatStore((s) => s.input);
-  const streaming = useChatStore((s) => s.streaming);
-  const model = useChatStore((s) => s.model);
-  const mode = useChatStore((s) => s.mode);
-  const models = useChatStore((s) => s.models);
-  const attachContext = useChatStore((s) => s.attachContext);
-  const onDevice = useChatStore((s) => s.onDevice);
-  const onDeviceSupported = useChatStore((s) => s.onDeviceSupported);
-  const agentTools = useChatStore((s) => s.agentTools);
-  const autoApprove = useChatStore((s) => s.autoApproveActions);
-  const pendingConfirm = useChatStore((s) => s.pendingConfirm);
-
-  const setInput = useChatStore((s) => s.setInput);
-  const setModel = useChatStore((s) => s.setModel);
-  const setMode = useChatStore((s) => s.setMode);
-  const setAttachContext = useChatStore((s) => s.setAttachContext);
-  const setOnDevice = useChatStore((s) => s.setOnDevice);
-  const setAgentTools = useChatStore((s) => s.setAgentTools);
-  const setAutoApprove = useChatStore((s) => s.setAutoApprove);
-  const resolveConfirm = useChatStore((s) => s.resolveConfirm);
-  const sendMessage = useChatStore((s) => s.sendMessage);
-  const stop = useChatStore((s) => s.stop);
-  const newChat = useChatStore((s) => s.newChat);
+  const chat = useChatStore(
+    useShallow((s) => ({
+      messages: s.messages,
+      input: s.input,
+      streaming: s.streaming,
+      model: s.model,
+      mode: s.mode,
+      models: s.models,
+      attachContext: s.attachContext,
+      onDevice: s.onDevice,
+      onDeviceSupported: s.onDeviceSupported,
+      agentTools: s.agentTools,
+      autoApprove: s.autoApproveActions,
+      pendingConfirm: s.pendingConfirm,
+    })),
+  );
+  // Store actions are stable references; this selector never re-renders.
+  const act = useChatStore(
+    useShallow((s) => ({
+      setInput: s.setInput,
+      setModel: s.setModel,
+      setMode: s.setMode,
+      setAttachContext: s.setAttachContext,
+      setOnDevice: s.setOnDevice,
+      setAgentTools: s.setAgentTools,
+      setAutoApprove: s.setAutoApprove,
+      resolveConfirm: s.resolveConfirm,
+      sendMessage: s.sendMessage,
+      stop: s.stop,
+      newChat: s.newChat,
+    })),
+  );
 
   const configured = useSettingsStore((s) => Boolean(s.baseUrl && s.apiKey));
   const accounts = useSettingsStore((s) => s.accounts);
   const activeId = useSettingsStore((s) => s.activeId);
   const setActive = useSettingsStore((s) => s.setActive);
 
-  const ids = new Set(models.map((m) => m.id));
-  if (model) ids.add(model);
+  const ids = new Set(chat.models.map((m) => m.id));
+  if (chat.model) ids.add(chat.model);
   const modelOptions = [...ids].map((id) => ({ value: id, label: id }));
 
-  const items: BubbleItemType[] = messages.map((m, i) => {
-    const isLast = i === messages.length - 1;
+  const items: BubbleItemType[] = chat.messages.map((m, i) => {
+    const isLast = i === chat.messages.length - 1;
     return {
       key: String(i),
       role: m.role === 'user' ? 'user' : 'ai',
       content: m.content,
-      loading: m.role === 'assistant' && !m.content && streaming && isLast,
+      loading: m.role === 'assistant' && !m.content && chat.streaming && isLast,
       footer:
         m.tools && m.tools.length > 0 ? (
           <ThoughtChain
@@ -104,8 +113,8 @@ export function ChatView() {
         <Select
           size="small"
           variant="borderless"
-          value={model}
-          onChange={setModel}
+          value={chat.model}
+          onChange={act.setModel}
           options={modelOptions}
           style={{ minWidth: 90 }}
           popupMatchSelectWidth={false}
@@ -117,13 +126,13 @@ export function ChatView() {
             size="small"
             icon={<EditOutlined />}
             aria-label="New chat"
-            onClick={newChat}
+            onClick={act.newChat}
           />
         </Tooltip>
       </header>
 
       <div className="messages">
-        {messages.length === 0 ? (
+        {chat.messages.length === 0 ? (
           <div className="welcome">
             <Welcome
               variant="borderless"
@@ -139,7 +148,7 @@ export function ChatView() {
               title="Try"
               items={SUGGESTIONS}
               wrap
-              onItemClick={(info) => setInput(String(info.data.label))}
+              onItemClick={(info) => act.setInput(String(info.data.label))}
             />
           </div>
         ) : (
@@ -147,17 +156,18 @@ export function ChatView() {
         )}
       </div>
 
-      {pendingConfirm && (
+      {chat.pendingConfirm && (
         <div className="confirm-card" role="alertdialog" aria-label="Confirm action">
           <WarningOutlined className="confirm-ico" />
           <div className="confirm-text">
-            Allow the agent to: <b>{actionSummary(pendingConfirm.tool, pendingConfirm.args)}</b>?
+            Allow the agent to:{' '}
+            <b>{actionSummary(chat.pendingConfirm.tool, chat.pendingConfirm.args)}</b>?
           </div>
           <div className="confirm-actions">
-            <Button size="small" onClick={() => resolveConfirm(false)}>
+            <Button size="small" onClick={() => act.resolveConfirm(false)}>
               Deny
             </Button>
-            <Button size="small" type="primary" onClick={() => resolveConfirm(true)}>
+            <Button size="small" type="primary" onClick={() => act.resolveConfirm(true)}>
               Allow
             </Button>
           </div>
@@ -169,42 +179,42 @@ export function ChatView() {
           label="Run"
           ariaLabel="Run mode"
           icon={<ThunderboltOutlined />}
-          active={mode === 'run'}
-          onChange={(v) => setMode(v ? 'run' : 'chat')}
-          tooltip="Use the Runs API for long autonomous tasks"
+          active={chat.mode === 'run'}
+          onChange={(v) => act.setMode(v ? 'run' : 'chat')}
+          tooltip="Use the Runs API for long autonomous tasks (turns Tools off)"
         />
         <ToggleChip
           label="Page"
           ariaLabel="Attach page context"
           icon={<FileTextOutlined />}
-          active={attachContext}
-          onChange={setAttachContext}
+          active={chat.attachContext}
+          onChange={act.setAttachContext}
           tooltip="Attach the current page's selection / content"
         />
         <ToggleChip
           label="Tools"
           ariaLabel="Agent tools"
           icon={<ToolOutlined />}
-          active={agentTools}
-          onChange={setAgentTools}
-          tooltip="Let the agent use your browser (read page, click, type, navigate)"
+          active={chat.agentTools}
+          onChange={act.setAgentTools}
+          tooltip="Let the agent use your browser (read page, click, type, navigate; turns Run off)"
         />
-        {agentTools && (
+        {chat.agentTools && (
           <ToggleChip
             label="Auto-run"
             ariaLabel="Auto-run actions"
-            active={autoApprove}
-            onChange={setAutoApprove}
+            active={chat.autoApprove}
+            onChange={act.setAutoApprove}
             tooltip="Run actions without confirming each one"
           />
         )}
-        {onDeviceSupported && (
+        {chat.onDeviceSupported && (
           <ToggleChip
             label="On-device"
             ariaLabel="Use on-device AI"
             icon={<RobotOutlined />}
-            active={onDevice}
-            onChange={setOnDevice}
+            active={chat.onDevice}
+            onChange={act.setOnDevice}
             tooltip="Answer locally with Chrome's built-in AI (no network)"
           />
         )}
@@ -212,11 +222,11 @@ export function ChatView() {
 
       <div className="composer">
         <Sender
-          value={input}
-          loading={streaming}
-          onChange={setInput}
-          onSubmit={sendMessage}
-          onCancel={stop}
+          value={chat.input}
+          loading={chat.streaming}
+          onChange={act.setInput}
+          onSubmit={act.sendMessage}
+          onCancel={act.stop}
           placeholder="Message the agent…  (Shift+Enter for newline)"
         />
       </div>

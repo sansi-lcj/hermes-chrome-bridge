@@ -33,17 +33,22 @@ export const useCatalogStore = create<CatalogState>((set) => ({
 
   loadSkills: async () => {
     set({ skillsLoading: true, skillsError: null });
-    try {
-      const [skills, toolsets] = await Promise.all([
-        sendRuntime<Skill[]>({ type: 'api', action: 'skills' }).catch(() => [] as Skill[]),
-        sendRuntime<Toolset[]>({ type: 'api', action: 'toolsets' }),
-      ]);
-      set({ skills, toolsets, skillsLoaded: true });
-    } catch (e) {
-      set({ skillsError: String(e) });
-    } finally {
-      set({ skillsLoading: false });
-    }
+    // Either endpoint may be missing on a given server: keep whatever loaded
+    // and surface an error only when both fail.
+    const [skills, toolsets] = await Promise.allSettled([
+      sendRuntime<Skill[]>({ type: 'api', action: 'skills' }),
+      sendRuntime<Toolset[]>({ type: 'api', action: 'toolsets' }),
+    ]);
+    set({
+      skills: skills.status === 'fulfilled' ? skills.value : [],
+      toolsets: toolsets.status === 'fulfilled' ? toolsets.value : [],
+      skillsError:
+        skills.status === 'rejected' && toolsets.status === 'rejected'
+          ? String(skills.reason)
+          : null,
+      skillsLoaded: true,
+      skillsLoading: false,
+    });
   },
 
   loadSessions: async () => {

@@ -23,6 +23,9 @@ import type {
 /** Cap tool-use rounds so a misbehaving agent can't loop forever. */
 export const MAX_TOOL_ROUNDS = 6;
 
+/** Named SSE event Hermes uses for tool-execution progress. */
+const TOOL_PROGRESS_EVENT = 'hermes.tool.progress';
+
 /** Executes a named tool and returns its result string. */
 export type ToolRunner = (name: string, args: string) => Promise<string>;
 
@@ -70,7 +73,11 @@ export class HermesClient {
     return (await res.json()) as T;
   }
 
-  /** Fetch + status check, throwing a typed HermesError. Used under withRetry. */
+  /**
+   * Fetch + status check, throwing a typed HermesError. Idempotent discovery
+   * requests run it under withRetry; streams and non-idempotent POSTs call it
+   * directly (exactly once).
+   */
   private async fetchOk(path: string, init?: RequestInit): Promise<Response> {
     let res: Response;
     try {
@@ -141,19 +148,18 @@ export class HermesClient {
     model: string,
     signal: AbortSignal,
   ): AsyncGenerator<ChatStreamEvent> {
-    const res = await fetch(`${this.baseUrl}/v1/chat/completions`, {
+    const res = await this.fetchOk('/v1/chat/completions', {
       method: 'POST',
-      headers: this.headers({ 'Content-Type': 'application/json' }),
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model, messages, stream: true }),
       signal,
     });
-    if (!res.ok) throw new HermesError(await this.describeError(res), res.status);
     if (!res.body) throw new HermesError('Hermes returned an empty stream body.');
 
     for await (const frame of parseSse(res.body, signal)) {
       // Hermes emits named events for tool progress; chat deltas arrive as the
       // default (unnamed) `data:` frames containing OpenAI chunk JSON.
-      if (frame.event && frame.event.includes('tool')) {
+      if (frame.event === TOOL_PROGRESS_EVENT) {
         yield { kind: 'tool', progress: safeJson<ToolProgressEvent>(frame.data) ?? {} };
         continue;
       }
@@ -177,13 +183,12 @@ export class HermesClient {
     tools: ToolSpec[] | undefined,
     signal: AbortSignal,
   ): Promise<ChatCompletionResponse> {
-    const res = await fetch(`${this.baseUrl}/v1/chat/completions`, {
+    const res = await this.fetchOk('/v1/chat/completions', {
       method: 'POST',
-      headers: this.headers({ 'Content-Type': 'application/json' }),
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model, messages, tools, stream: false }),
       signal,
     });
-    if (!res.ok) throw new HermesError(await this.describeError(res), res.status);
     return (await res.json()) as ChatCompletionResponse;
   }
 
@@ -225,19 +230,21 @@ export class HermesClient {
   // ----- Runs API (long tasks) ---------------------------------------------
 
   async createRun(messages: ChatMessage[], model: string): Promise<RunInfo> {
-    return this.request<RunInfo>('/v1/runs', {
+    // Deliberately not retried: POST /v1/runs is not idempotent, and retrying a
+    // transient failure after server-side creation would start duplicate Runs.
+    const res = await this.fetchOk('/v1/runs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model, input: messages }),
     });
+    return (await res.json()) as RunInfo;
   }
 
   async *runEvents(runId: string, signal: AbortSignal): AsyncGenerator<RunEvent> {
-    const res = await fetch(`${this.baseUrl}/v1/runs/${encodeURIComponent(runId)}/events`, {
-      headers: this.headers({ Accept: 'text/event-stream' }),
+    const res = await this.fetchOk(`/v1/runs/${encodeURIComponent(runId)}/events`, {
+      headers: { Accept: 'text/event-stream' },
       signal,
     });
-    if (!res.ok) throw new HermesError(await this.describeError(res), res.status);
     if (!res.body) throw new HermesError('Hermes returned an empty run-events body.');
     for await (const frame of parseSse(res.body, signal)) {
       if (frame.data === '[DONE]') return;

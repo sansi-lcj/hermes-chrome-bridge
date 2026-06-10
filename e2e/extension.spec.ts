@@ -1,5 +1,9 @@
 import { test, expect, type Page } from './fixtures';
-import { startMockServer, type MockServer } from '../src/test/mockHermesServer';
+import { MOCK, startMockServer, type MockServer } from '../src/test/mockHermesServer';
+
+// A streamed-answer substring that survives Markdown rendering (the leading
+// "**Hello**" becomes a <strong>, so match on the plain part).
+const STREAMED_ANSWER = 'Streaming works!';
 
 let server: MockServer;
 
@@ -42,8 +46,8 @@ test('configure connection, then stream a chat answer end-to-end', async ({
   await composer.fill('hello');
   await composer.press('Enter');
 
-  // The mock streams "Hello world" via SSE; it should render in the bubble.
-  await expect(page.getByText('Hello world')).toBeVisible();
+  // The mock streams a Markdown answer via SSE; it should render in the bubble.
+  await expect(page.getByText(STREAMED_ANSWER)).toBeVisible();
 });
 
 test('agent tools: the agent calls a browser tool, then answers', async ({ page, extensionId }) => {
@@ -56,7 +60,7 @@ test('agent tools: the agent calls a browser tool, then answers', async ({ page,
   await composer.fill('what tabs do I have open?');
   await composer.press('Enter');
 
-  await expect(page.getByText('Tools done')).toBeVisible();
+  await expect(page.getByText(MOCK.TOOLS_DONE)).toBeVisible();
   await expect(page.getByText(/list_tabs/).first()).toBeVisible();
 });
 
@@ -73,7 +77,7 @@ test('write tools ask for confirmation before running', async ({ page, extension
   // A confirmation prompt appears for the write tool with a readable summary.
   await expect(page.getByText(/Open https:\/\/example\.com/)).toBeVisible();
   await page.getByRole('button', { name: 'Allow' }).click();
-  await expect(page.getByText('Tools done')).toBeVisible();
+  await expect(page.getByText(MOCK.TOOLS_DONE)).toBeVisible();
 });
 
 test('Test connection reports the mock models', async ({ page, extensionId }) => {
@@ -89,7 +93,7 @@ test('multi-account: switch accounts with isolated chat history', async ({ page,
   const composer = page.getByPlaceholder(/Message the agent/);
   await composer.fill('hi from alpha');
   await composer.press('Enter');
-  await expect(page.getByText('Hello world')).toBeVisible();
+  await expect(page.getByText(STREAMED_ANSWER)).toBeVisible();
 
   // Add a second account "Beta" (becomes active) — its conversation is empty.
   await page.getByLabel('segmented control').getByText('Settings').click();

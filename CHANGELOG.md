@@ -1,5 +1,67 @@
 # Changelog
 
+## 1.8.1
+
+Code-audit release: every finding from a full clean-code/best-practices review,
+fixed and regression-tested.
+
+### Fixed
+
+- **Test connection no longer saves (or duplicates) the account.** It now
+  probes the form draft via an explicit settings payload to the background;
+  repeated Test clicks previously each added a new account.
+- **Account switch mid-stream can no longer write one account's chat history
+  under another account's key** — persistence is keyed to the account the
+  messages were loaded for, not whichever account is active at save time.
+- **Omnibox queries open the panel within the user gesture** (the previous
+  `await` before `sidePanel.open()` could consume the gesture — the same bug
+  fixed for context menus in 1.1.1). The background now tracks the focused
+  window so gesture-sensitive paths open synchronously.
+- **The "new chat" keyboard command works when the panel is closed** — it now
+  uses the same store-then-poke pattern as pending prompts instead of a
+  broadcast that nobody hears while the panel is still loading.
+- `POST /v1/runs` is no longer retried (not idempotent — a transient failure
+  after server-side creation could start duplicate Runs).
+- A double-submit while the page-context fetch was in flight could dispatch the
+  same message twice.
+- Tool-progress SSE events are matched by their exact name
+  (`hermes.tool.progress`) instead of any event containing "tool".
+- Account cards are keyboard-activatable (Enter/Space), as `role="button"`
+  requires.
+- Toasts go through antd's context-aware `App.useApp()` message instance
+  (the static API can't consume the theme context and warns).
+- A failed `permissions.request` is reported as an error with its cause, not as
+  "permission not granted".
+
+### Changed
+
+- One mock Hermes implementation (`scripts/mock-hermes.mjs`) now serves both
+  `npm run mock` and the Vitest/Playwright suites; canonical response strings
+  are exported and asserted against, so the two can't drift.
+- `HermesClient` requests share one `fetchOk` path (status checks / error
+  shaping were triplicated); Run-event accumulation is shared between live
+  streaming and orphan resumption.
+- **Run mode and Agent tools are now visibly mutually exclusive** (tools
+  previously won silently when both toggles were on).
+- The panel⇄worker Port reconnects with exponential backoff; IDs use
+  `crypto.randomUUID()`; magic numbers named; brand accent has a single source
+  (`src/brand.json`) feeding both the theme and the icon generator.
+- Content-script message handlers respond synchronously and no longer signal an
+  async response; tool relays preserve the underlying error ("No active tab" is
+  no longer misreported as a missing content script).
+- Skills/toolsets load independently — one missing endpoint no longer discards
+  the other's data.
+- Removed dead code: unused `ChatCompletionRequest` type, `settingsValues()` /
+  `activeAccount()`, a redundant error branch, a misleading non-empty
+  `DEFAULT_SETTINGS.baseUrl`, and a doubled `/v1/models` call in Test
+  connection.
+
+### Added
+
+- Tests: the content script's message handlers (jsdom), the settings form
+  (Test-without-saving, permission-error reporting), the new-chat pending flag,
+  the double-submit guard, and Run/Tools exclusivity.
+
 ## 1.8.0
 
 Multiple accounts — connect to several Hermes accounts (each its own key) and
