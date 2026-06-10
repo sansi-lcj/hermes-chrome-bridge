@@ -13,11 +13,14 @@ import {
 } from '@ant-design/icons';
 import { Bubble, Prompts, ThoughtChain, Welcome } from '@ant-design/x';
 import type { BubbleItemType, BubbleListProps } from '@ant-design/x';
+import { LockFilled } from '@ant-design/icons';
+import { Tag } from 'antd';
 import { useShallow } from 'zustand/react/shallow';
 import { actionSummary } from '../../lib/actionSummary';
 import { feedback } from '../../lib/feedback';
 import type { StoredMessage } from '../../lib/conversation';
-import { useChatStore, useSettingsStore, useUiStore } from '../../stores';
+import { matchProfile } from '../../lib/profiles';
+import { useChatStore, useProfilesStore, useSettingsStore, useUiStore } from '../../stores';
 import { Composer } from './Composer';
 import { ConversationsDrawer } from './ConversationsDrawer';
 import { Markdown } from './Markdown';
@@ -87,6 +90,9 @@ export function ChatView() {
   const activeId = useSettingsStore((s) => s.activeId);
   const setActive = useSettingsStore((s) => s.setActive);
   const setConvsOpen = useUiStore((s) => s.setConvsOpen);
+  const profiles = useProfilesStore((s) => s.profiles);
+  const activeUrl = useProfilesStore((s) => s.activeUrl);
+  const profile = matchProfile(profiles, activeUrl);
 
   const ids = new Set(chat.models.map((m) => m.id));
   if (chat.model) ids.add(chat.model);
@@ -204,6 +210,22 @@ export function ChatView() {
           />
         </Tooltip>
         <span className={configured ? 'status-dot ok' : 'status-dot'} aria-hidden />
+        {profile && (
+          <Tooltip
+            title={`Site profile "${profile.label}" is active${
+              profile.private ? ' (on-device)' : ''
+            }`}
+          >
+            <Tag
+              color={profile.private ? 'warning' : 'processing'}
+              icon={profile.private ? <LockFilled /> : undefined}
+              className="profile-tag"
+              aria-label={`Active site profile ${profile.label}`}
+            >
+              {profile.label}
+            </Tag>
+          </Tooltip>
+        )}
         {accounts.length > 0 && (
           <Select
             size="small"
