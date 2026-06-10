@@ -2,17 +2,23 @@ import { create } from 'zustand';
 import { message } from 'antd';
 import { sendRuntime } from '../lib/messaging';
 import { originPattern } from '../lib/url';
-import type { ChatMode, ModelInfo } from '../lib/types';
-import { settingsValues, useSettingsStore } from './settings';
+import { DEFAULT_SETTINGS, type Account, type ChatMode, type ModelInfo } from '../lib/types';
+import { useSettingsStore } from './settings';
 
 interface SettingsFormState {
+  visible: boolean;
+  editingId: string | null;
+  name: string;
   baseUrl: string;
   apiKey: string;
   defaultModel: string;
   mode: ChatMode;
   busy: boolean;
 
-  reset: () => void;
+  openAdd: () => void;
+  openEdit: (account: Account) => void;
+  close: () => void;
+  setName: (v: string) => void;
   setBaseUrl: (v: string) => void;
   setApiKey: (v: string) => void;
   setDefaultModel: (v: string) => void;
@@ -21,8 +27,9 @@ interface SettingsFormState {
   test: () => Promise<void>;
 }
 
+/** Request the host permission and add/update the account; activate it. */
 async function persist(get: () => SettingsFormState): Promise<boolean> {
-  const { baseUrl, apiKey, defaultModel, mode } = get();
+  const { name, baseUrl, apiKey, defaultModel, mode, editingId } = get();
   const origin = originPattern(baseUrl);
   if (!origin) {
     message.error('Enter a valid http(s) URL.');
@@ -33,19 +40,45 @@ async function persist(get: () => SettingsFormState): Promise<boolean> {
     message.warning(`Host permission for ${origin} was not granted; requests will fail.`);
     return false;
   }
-  await useSettingsStore.getState().save({ baseUrl, apiKey, defaultModel, mode });
+  const store = useSettingsStore.getState();
+  const payload = { name: name.trim() || 'Account', baseUrl, apiKey, defaultModel, mode };
+  if (editingId) {
+    await store.updateAccount(editingId, payload);
+    await store.setActive(editingId);
+  } else {
+    await store.addAccount(payload);
+  }
   return true;
 }
 
-/** Editable draft of the settings form, persisted only on Save/Test. */
-export const useSettingsFormStore = create<SettingsFormState>((set, get) => ({
+const blank = {
+  visible: false,
+  editingId: null as string | null,
+  name: '',
   baseUrl: '',
   apiKey: '',
-  defaultModel: '',
-  mode: 'chat',
+  defaultModel: DEFAULT_SETTINGS.defaultModel,
+  mode: 'chat' as ChatMode,
   busy: false,
+};
 
-  reset: () => set({ ...settingsValues() }),
+export const useSettingsFormStore = create<SettingsFormState>((set, get) => ({
+  ...blank,
+
+  openAdd: () => set({ ...blank, visible: true }),
+  openEdit: (a) =>
+    set({
+      visible: true,
+      editingId: a.id,
+      name: a.name,
+      baseUrl: a.baseUrl,
+      apiKey: a.apiKey,
+      defaultModel: a.defaultModel,
+      mode: a.mode,
+      busy: false,
+    }),
+  close: () => set({ visible: false }),
+  setName: (name) => set({ name }),
   setBaseUrl: (baseUrl) => set({ baseUrl }),
   setApiKey: (apiKey) => set({ apiKey }),
   setDefaultModel: (defaultModel) => set({ defaultModel }),
@@ -54,7 +87,10 @@ export const useSettingsFormStore = create<SettingsFormState>((set, get) => ({
   save: async () => {
     set({ busy: true });
     try {
-      if (await persist(get)) message.success('Saved.');
+      if (await persist(get)) {
+        message.success('Saved.');
+        set({ visible: false });
+      }
     } finally {
       set({ busy: false });
     }

@@ -1,32 +1,77 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import { getSettings, setSettings } from '../lib/storage';
-import { DEFAULT_SETTINGS, type Settings } from '../lib/types';
+import { connectionOf, loadAccounts, newAccountId, saveAccounts } from '../lib/accounts';
+import {
+  DEFAULT_SETTINGS,
+  type Account,
+  type AccountsState,
+  type ChatMode,
+  type Settings,
+} from '../lib/types';
 
-interface SettingsState extends Settings {
+interface SettingsState {
+  accounts: Account[];
+  activeId: string | null;
   loaded: boolean;
+  // The active account's connection, mirrored flat for existing readers.
+  baseUrl: string;
+  apiKey: string;
+  defaultModel: string;
+  mode: ChatMode;
+
+  apply: (state: AccountsState) => void;
   load: () => Promise<void>;
-  save: (patch: Partial<Settings>) => Promise<Settings>;
+  addAccount: (a: Omit<Account, 'id'>) => Promise<string>;
+  updateAccount: (id: string, patch: Partial<Omit<Account, 'id'>>) => Promise<void>;
+  removeAccount: (id: string) => Promise<void>;
+  setActive: (id: string) => Promise<void>;
 }
 
-/** Observable mirror of the persisted settings (chrome.storage.local). */
+function flat(state: AccountsState) {
+  return { accounts: state.accounts, activeId: state.activeId, ...connectionOf(state) };
+}
+
 export const useSettingsStore = create<SettingsState>()(
-  subscribeWithSelector((set) => ({
-    ...DEFAULT_SETTINGS,
+  subscribeWithSelector((set, get) => ({
+    accounts: [],
+    activeId: null,
     loaded: false,
+    ...DEFAULT_SETTINGS,
+    baseUrl: '',
+    apiKey: '',
+
+    apply: (state) => set(flat(state)),
+
     load: async () => {
-      const s = await getSettings();
-      set({ ...s, loaded: true });
+      set({ ...flat(await loadAccounts()), loaded: true });
     },
-    save: async (patch) => {
-      const next = await setSettings(patch);
-      set({ ...next });
-      return next;
+    addAccount: async (a) => {
+      const account: Account = { id: newAccountId(), ...a };
+      set(
+        flat(await saveAccounts({ accounts: [...get().accounts, account], activeId: account.id })),
+      );
+      return account.id;
+    },
+    updateAccount: async (id, patch) => {
+      const accounts = get().accounts.map((acc) => (acc.id === id ? { ...acc, ...patch } : acc));
+      set(flat(await saveAccounts({ accounts, activeId: get().activeId })));
+    },
+    removeAccount: async (id) => {
+      const accounts = get().accounts.filter((acc) => acc.id !== id);
+      const activeId = get().activeId === id ? (accounts[0]?.id ?? null) : get().activeId;
+      set(flat(await saveAccounts({ accounts, activeId })));
+    },
+    setActive: async (id) => {
+      set(flat(await saveAccounts({ accounts: get().accounts, activeId: id })));
     },
   })),
 );
 
-/** Current persisted values as a plain Settings object. */
+export function activeAccount(): Account | null {
+  const { accounts, activeId } = useSettingsStore.getState();
+  return accounts.find((a) => a.id === activeId) ?? null;
+}
+
 export function settingsValues(): Settings {
   const { baseUrl, apiKey, defaultModel, mode } = useSettingsStore.getState();
   return { baseUrl, apiKey, defaultModel, mode };

@@ -57,6 +57,9 @@ export function ChatView() {
   const newChat = useChatStore((s) => s.newChat);
 
   const configured = useSettingsStore((s) => Boolean(s.baseUrl && s.apiKey));
+  const accounts = useSettingsStore((s) => s.accounts);
+  const activeId = useSettingsStore((s) => s.activeId);
+  const setActive = useSettingsStore((s) => s.setActive);
 
   const ids = new Set(models.map((m) => m.id));
   if (model) ids.add(model);
@@ -86,13 +89,25 @@ export function ChatView() {
     <div className="chat">
       <header className="chat-header">
         <span className={configured ? 'status-dot ok' : 'status-dot'} aria-hidden />
+        {accounts.length > 0 && (
+          <Select
+            size="small"
+            variant="borderless"
+            value={activeId ?? undefined}
+            onChange={(id) => void setActive(id)}
+            options={accounts.map((a) => ({ value: a.id, label: a.name }))}
+            popupMatchSelectWidth={false}
+            aria-label="Account"
+            className="account-select"
+          />
+        )}
         <Select
           size="small"
           variant="borderless"
           value={model}
           onChange={setModel}
           options={modelOptions}
-          style={{ minWidth: 110 }}
+          style={{ minWidth: 90 }}
           popupMatchSelectWidth={false}
         />
         <span className="spacer" />

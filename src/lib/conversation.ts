@@ -7,7 +7,8 @@ export interface StoredMessage {
   tools?: string[];
 }
 
-const KEY = 'conversation';
+/** Each account keeps its own conversation under conv:<accountId>. */
+const keyFor = (accountId: string) => `conv:${accountId}`;
 
 /** Cap stored history so chrome.storage.local can't grow unbounded. */
 export const MAX_STORED_MESSAGES = 200;
@@ -22,19 +23,25 @@ export function trimConversation(messages: StoredMessage[]): StoredMessage[] {
     : withoutEmptyTail;
 }
 
-/** Load the persisted conversation (empty if none). */
-export async function loadConversation(): Promise<StoredMessage[]> {
-  const res = await chrome.storage.local.get(KEY);
-  const msgs = res[KEY] as StoredMessage[] | undefined;
+/** Load an account's persisted conversation (empty if none / no active account). */
+export async function loadConversation(accountId: string | null): Promise<StoredMessage[]> {
+  if (!accountId) return [];
+  const res = await chrome.storage.local.get(keyFor(accountId));
+  const msgs = res[keyFor(accountId)] as StoredMessage[] | undefined;
   return Array.isArray(msgs) ? msgs : [];
 }
 
-/** Persist the conversation (empty tail dropped, capped to the recent window). */
-export async function saveConversation(messages: StoredMessage[]): Promise<void> {
-  await chrome.storage.local.set({ [KEY]: trimConversation(messages) });
+/** Persist an account's conversation (empty tail dropped, capped). */
+export async function saveConversation(
+  accountId: string | null,
+  messages: StoredMessage[],
+): Promise<void> {
+  if (!accountId) return;
+  await chrome.storage.local.set({ [keyFor(accountId)]: trimConversation(messages) });
 }
 
-/** Clear the persisted conversation. */
-export async function clearConversation(): Promise<void> {
-  await chrome.storage.local.remove(KEY);
+/** Clear an account's persisted conversation. */
+export async function clearConversation(accountId: string | null): Promise<void> {
+  if (!accountId) return;
+  await chrome.storage.local.remove(keyFor(accountId));
 }

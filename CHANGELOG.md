@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.8.0
+
+Multiple accounts — connect to several Hermes accounts (each its own key) and
+switch between them.
+
+### Added
+
+- **Multi-account**: manage accounts in Settings (each has its own name, base
+  URL, API key, default model, mode), switch the active one from the **header
+  dropdown** or by tapping a card. The active account's connection is what every
+  request uses; the background/API client stay account-agnostic.
+- **Per-account chat history**: each account keeps its own conversation
+  (`conv:<accountId>`); switching accounts swaps the history.
+- **Automatic migration**: a pre-existing single connection (and its chat) is
+  migrated into a "Default" account on first run.
+- Tests: `accounts` persistence/migration/CRUD, the multi-account `SettingsView`
+  add flow, and an **E2E** that adds two accounts and verifies isolated history.
+
 ## 1.7.1
 
 ### Fixed

@@ -11,7 +11,12 @@ const stored: Record<string, unknown> = {};
 vi.stubGlobal('chrome', {
   storage: {
     local: {
-      get: vi.fn(async () => ({})),
+      get: vi.fn(async (keys: string | string[]) => {
+        const arr = Array.isArray(keys) ? keys : [keys];
+        const out: Record<string, unknown> = {};
+        for (const k of arr) if (k in stored) out[k] = stored[k];
+        return out;
+      }),
       set: vi.fn(async (o: Record<string, unknown>) => Object.assign(stored, o)),
     },
     onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
@@ -22,21 +27,29 @@ vi.stubGlobal('chrome', {
 const { SettingsView } = await import('./SettingsView');
 const { useSettingsStore } = await import('../../stores/settings');
 
-describe('SettingsView', () => {
-  it('saves settings and requests the host permission for the origin', async () => {
+describe('SettingsView (multi-account)', () => {
+  it('adds an account, requests the port-less host permission, and activates it', async () => {
     const user = userEvent.setup();
     render(<SettingsView />);
 
-    await user.type(screen.getByPlaceholderText('http://127.0.0.1:8642'), 'http://localhost:9999');
+    await user.click(screen.getByRole('button', { name: /Add account/ }));
+    await user.type(screen.getByPlaceholderText('e.g. Work'), 'Work');
+    await user.type(screen.getByPlaceholderText('http://127.0.0.1:8642'), 'http://localhost:8642');
     await user.type(screen.getByPlaceholderText('API_SERVER_KEY'), 'secret');
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
     // Port dropped — Chrome match patterns can't contain a port.
-    expect(chrome.permissions.request).toHaveBeenCalledWith({
-      origins: ['http://localhost/*'],
-    });
+    expect(chrome.permissions.request).toHaveBeenCalledWith({ origins: ['http://localhost/*'] });
     expect(message.success).toHaveBeenCalledWith('Saved.');
-    expect(useSettingsStore.getState().baseUrl).toBe('http://localhost:9999');
-    expect(useSettingsStore.getState().apiKey).toBe('secret');
+
+    const state = useSettingsStore.getState();
+    expect(state.accounts).toHaveLength(1);
+    expect(state.accounts[0]).toMatchObject({
+      name: 'Work',
+      baseUrl: 'http://localhost:8642',
+      apiKey: 'secret',
+    });
+    expect(state.activeId).toBe(state.accounts[0].id);
+    expect(state.baseUrl).toBe('http://localhost:8642');
   });
 });

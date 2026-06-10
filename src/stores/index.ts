@@ -1,19 +1,18 @@
 // Zustand stores + one-time side-effect wiring. Components import the hooks
-// from here; `initStores()` (called once from main) loads settings, connects
+// from here; `initStores()` (called once from main) loads accounts, connects
 // the Port, and sets up cross-store subscriptions.
 
 import { shallow } from 'zustand/shallow';
+import { onAccountsChanged } from '../lib/accounts';
 import { saveConversation } from '../lib/conversation';
-import { onSettingsChanged } from '../lib/storage';
-import { initChat, loadModels, useChatStore } from './chat';
+import { initChat, loadActiveConversation, loadModels, useChatStore } from './chat';
 import { useCatalogStore } from './catalog';
 import { isConfigured, useSettingsStore } from './settings';
-import { useSettingsFormStore } from './settingsForm';
 import { useUiStore } from './ui';
 
 export { useChatStore } from './chat';
 export { useCatalogStore } from './catalog';
-export { useSettingsStore } from './settings';
+export { useSettingsStore, activeAccount } from './settings';
 export { useSettingsFormStore } from './settingsForm';
 export { useUiStore } from './ui';
 export type { Tab } from './ui';
@@ -24,10 +23,11 @@ export function initStores(): void {
   if (initialized) return;
   initialized = true;
 
-  // Mirror external storage changes into the settings store.
-  onSettingsChanged((s) => useSettingsStore.setState({ ...s }));
+  // Mirror external account changes (e.g. another panel) into the store.
+  onAccountsChanged((state) => useSettingsStore.getState().apply(state));
 
-  // Keep chat defaults in sync with settings; reload models when the server changes.
+  // Keep chat defaults in sync with the active account; reload models when the
+  // active connection changes.
   useSettingsStore.subscribe(
     (s) => [s.defaultModel, s.mode] as const,
     ([defaultModel, mode]) => useChatStore.setState({ model: defaultModel, mode }),
@@ -39,13 +39,18 @@ export function initStores(): void {
     { equalityFn: shallow, fireImmediately: true },
   );
 
-  // Seed the settings-form draft and route unconfigured users to Settings.
+  // Switch conversation history when the active account changes (also fires once
+  // after accounts load to populate the initial conversation).
+  useSettingsStore.subscribe(
+    (s) => s.activeId,
+    () => void loadActiveConversation(),
+  );
+
+  // Route an unconfigured user to Settings once accounts have loaded.
   useSettingsStore.subscribe(
     (s) => s.loaded,
     (loaded) => {
-      if (!loaded) return;
-      useSettingsFormStore.getState().reset();
-      if (!isConfigured()) useUiStore.getState().setTab('settings');
+      if (loaded && !isConfigured()) useUiStore.getState().setTab('settings');
     },
   );
 
@@ -59,11 +64,13 @@ export function initStores(): void {
     },
   );
 
-  // Persist whenever a turn completes (skip mid-stream churn).
+  // Persist the active account's conversation whenever a turn completes.
   useChatStore.subscribe(
     (s) => ({ streaming: s.streaming, messages: s.messages }),
     ({ streaming, messages }) => {
-      if (!streaming && messages.length > 0) void saveConversation(messages);
+      if (!streaming && messages.length > 0) {
+        void saveConversation(useSettingsStore.getState().activeId, messages);
+      }
     },
     { equalityFn: shallow },
   );

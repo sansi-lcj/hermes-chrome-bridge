@@ -28,6 +28,18 @@ export const DEFAULT_SETTINGS: Settings = {
   mode: 'chat',
 };
 
+/** A named connection to a Hermes account (each has its own key/base URL). */
+export interface Account extends Settings {
+  id: string;
+  name: string;
+}
+
+/** Persisted multi-account state. */
+export interface AccountsState {
+  accounts: Account[];
+  activeId: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // Hermes / OpenAI-compatible API shapes
 // ---------------------------------------------------------------------------
