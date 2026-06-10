@@ -3,7 +3,7 @@ import { subscribeWithSelector } from 'zustand/middleware';
 import { onDeviceAvailable, onDevicePromptStream } from '../lib/builtinAI';
 import { clearConversation, loadConversation, type StoredMessage } from '../lib/conversation';
 import { sendRuntime } from '../lib/messaging';
-import { takePendingPrompt } from '../lib/pending';
+import { takePendingNewChat, takePendingPrompt } from '../lib/pending';
 import type {
   BackgroundToUi,
   ChatMode,
@@ -15,13 +15,25 @@ import type {
 } from '../lib/types';
 import { useSettingsStore } from './settings';
 
-let counter = 0;
-const nextId = () => `req-${Date.now()}-${counter++}`;
+const nextId = () => `req-${crypto.randomUUID()}`;
 
 // Non-reactive internals (the Chrome Port is not UI state).
 let port: chrome.runtime.Port | null = null;
 let activeReq: string | null = null;
 let odToken = 0;
+/** Guards the async page-context fetch so a double-submit can't dispatch twice. */
+let sendInFlight = false;
+/**
+ * The account whose conversation is currently in `messages`. Captured at load
+ * time (not read from the settings store at save time) so persistence can never
+ * write one account's history under another's key during an account switch.
+ */
+let conversationAccountId: string | null = null;
+let convLoadToken = 0;
+
+export function getConversationAccountId(): string | null {
+  return conversationAccountId;
+}
 
 interface ChatState {
   messages: StoredMessage[];
@@ -69,11 +81,13 @@ export const useChatStore = create<ChatState>()(
     pendingConfirm: null,
 
     setInput: (input) => set({ input }),
-    setMode: (mode) => set({ mode }),
+    // Run mode and Agent tools are mutually exclusive (tools drive the chat
+    // completions loop); enabling one visibly switches the other off.
+    setMode: (mode) => set(mode === 'run' ? { mode, agentTools: false } : { mode }),
     setModel: (model) => set({ model }),
     setAttachContext: (attachContext) => set({ attachContext }),
     setOnDevice: (onDevice) => set({ onDevice }),
-    setAgentTools: (agentTools) => set({ agentTools }),
+    setAgentTools: (agentTools) => set(agentTools ? { agentTools, mode: 'chat' } : { agentTools }),
     setAutoApprove: (autoApproveActions) => set({ autoApproveActions }),
     resolveConfirm: (approved) => {
       const pc = get().pendingConfirm;
@@ -84,11 +98,15 @@ export const useChatStore = create<ChatState>()(
 
     sendMessage: (text) => {
       const trimmed = text.trim();
-      if (!trimmed || get().streaming) return;
+      if (!trimmed || get().streaming || sendInFlight) return;
       if (get().attachContext) {
+        sendInFlight = true; // block a second submit while the context fetch is in flight
         sendRuntime<PageContext>({ type: 'getActivePageContext' })
           .then((ctx) => dispatch(`${trimmed}\n\n${formatContext(ctx)}`))
-          .catch(() => dispatch(trimmed));
+          .catch(() => dispatch(trimmed))
+          .finally(() => {
+            sendInFlight = false;
+          });
       } else {
         dispatch(trimmed);
       }
@@ -103,7 +121,7 @@ export const useChatStore = create<ChatState>()(
     newChat: () => {
       if (get().streaming) get().stop();
       set({ messages: [], pendingConfirm: null });
-      void clearConversation(useSettingsStore.getState().activeId);
+      void clearConversation(conversationAccountId);
     },
   })),
 );
@@ -173,9 +191,16 @@ export function onPortMessage(msg: BackgroundToUi): void {
   }
 }
 
+const RECONNECT_BASE_MS = 250;
+const RECONNECT_MAX_MS = 5_000;
+let reconnectDelay = RECONNECT_BASE_MS;
+
 function connect(): void {
   port = chrome.runtime.connect({ name: 'hermes' });
-  port.onMessage.addListener((msg: BackgroundToUi) => onPortMessage(msg));
+  port.onMessage.addListener((msg: BackgroundToUi) => {
+    reconnectDelay = RECONNECT_BASE_MS; // traffic means the link is healthy
+    onPortMessage(msg);
+  });
   port.onDisconnect.addListener(() => {
     port = null;
     // The background aborts our in-flight stream when the port drops (e.g. the
@@ -189,7 +214,8 @@ function connect(): void {
       }));
       useChatStore.setState({ streaming: false, pendingConfirm: null });
     }
-    setTimeout(connect, 250);
+    setTimeout(connect, reconnectDelay);
+    reconnectDelay = Math.min(reconnectDelay * 2, RECONNECT_MAX_MS); // back off
   });
 }
 
@@ -210,8 +236,12 @@ export async function loadModels(): Promise<void> {
 /** Load the active account's conversation, resetting any in-flight state.
  *  Called on startup and whenever the active account changes. */
 export async function loadActiveConversation(): Promise<void> {
+  const token = ++convLoadToken;
   useChatStore.getState().stop();
-  const messages = await loadConversation(useSettingsStore.getState().activeId);
+  const accountId = useSettingsStore.getState().activeId;
+  const messages = await loadConversation(accountId);
+  if (token !== convLoadToken) return; // superseded by a newer account switch
+  conversationAccountId = accountId;
   useChatStore.setState({ messages, input: '', pendingConfirm: null });
 }
 
@@ -237,7 +267,9 @@ async function runOnDevice(token: number): Promise<void> {
   }
 }
 
+/** Consume any pending panel actions (stored once, applied exactly once). */
 async function consumePending(): Promise<void> {
+  if (await takePendingNewChat()) useChatStore.getState().newChat();
   const p = await takePendingPrompt();
   if (p) applyPrompt(p.text, p.autoSend);
 }
@@ -248,8 +280,9 @@ function applyPrompt(text: string, autoSend: boolean): void {
 }
 
 function onBroadcast(msg: PanelBroadcast): void {
-  if (msg.type === 'pendingPrompt') void consumePending();
-  else if (msg.type === 'newChat') useChatStore.getState().newChat();
+  // Both broadcasts are data-less pokes; the action itself lives in storage so
+  // it also reaches a panel that had to open first (and applies exactly once).
+  if (msg.type === 'pendingPrompt' || msg.type === 'newChat') void consumePending();
 }
 
 /** Wire side effects: Port, persisted history, on-device detection, prompts. */

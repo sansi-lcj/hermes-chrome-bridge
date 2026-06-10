@@ -2,10 +2,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { registerFeedback } from '../../lib/feedback';
 
-// Stub antd's static message so the flow doesn't depend on a toast container.
+// Capture toasts via the feedback indirection (the panel normally registers
+// antd's context-aware message instance here).
 const message = { success: vi.fn(), error: vi.fn(), warning: vi.fn() };
-vi.mock('antd', async (orig) => ({ ...(await orig<typeof import('antd')>()), message }));
+registerFeedback(message);
 
 const stored: Record<string, unknown> = {};
 vi.stubGlobal('chrome', {

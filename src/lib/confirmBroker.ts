@@ -10,7 +10,6 @@ export interface ConfirmRequestMsg {
 
 export class ConfirmBroker {
   private pending = new Map<string, (approved: boolean) => void>();
-  private counter = 0;
 
   constructor(private timeoutMs = 120_000) {}
 
@@ -30,7 +29,7 @@ export class ConfirmBroker {
     signal: AbortSignal,
   ): Promise<boolean> {
     if (signal.aborted) return Promise.resolve(false);
-    const confirmId = `cf-${Date.now()}-${this.counter++}`;
+    const confirmId = `cf-${crypto.randomUUID()}`;
     return new Promise((resolve) => {
       const done = (approved: boolean) => {
         clearTimeout(timer);

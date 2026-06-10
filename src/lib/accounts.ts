@@ -9,7 +9,7 @@ const LEGACY_SETTINGS_KEY = 'settings';
 const LEGACY_CONVERSATION_KEY = 'conversation';
 
 export function newAccountId(): string {
-  return `acc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return `acc-${crypto.randomUUID()}`;
 }
 
 export function emptyAccounts(): AccountsState {
@@ -19,7 +19,7 @@ export function emptyAccounts(): AccountsState {
 /** The active account's connection, or an unconfigured (blank) Settings. */
 export function connectionOf(state: AccountsState): Settings {
   const acc = state.accounts.find((a) => a.id === state.activeId);
-  if (!acc) return { ...DEFAULT_SETTINGS, baseUrl: '', apiKey: '' };
+  if (!acc) return { ...DEFAULT_SETTINGS };
   return {
     baseUrl: acc.baseUrl,
     apiKey: acc.apiKey,

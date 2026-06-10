@@ -21,8 +21,9 @@ export interface Settings {
   mode: ChatMode;
 }
 
+/** Connection defaults for a new / unconfigured account (no server until set). */
 export const DEFAULT_SETTINGS: Settings = {
-  baseUrl: 'http://127.0.0.1:8642',
+  baseUrl: '',
   apiKey: '',
   defaultModel: 'hermes',
   mode: 'chat',
@@ -65,13 +66,6 @@ export interface ChatMessage {
 export interface ToolSpec {
   type: 'function';
   function: { name: string; description: string; parameters: Record<string, unknown> };
-}
-
-export interface ChatCompletionRequest {
-  model: string;
-  messages: ChatMessage[];
-  stream?: boolean;
-  tools?: ToolSpec[];
 }
 
 export interface ChatCompletionResponse {
@@ -256,6 +250,11 @@ export type ApiAction = 'testConnection' | 'models' | 'skills' | 'toolsets' | 's
 export interface ApiRequest {
   type: 'api';
   action: ApiAction;
+  /**
+   * Connection override, e.g. "Test connection" probing an unsaved form draft.
+   * Absent: the active account's saved connection is used.
+   */
+  settings?: Settings;
 }
 
 export type ApiResponse<T = unknown> = { ok: true; data: T } | { ok: false; error: string };

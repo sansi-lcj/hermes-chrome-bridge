@@ -9,7 +9,7 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     coverage: {
-      include: ['src/lib/**', 'src/stores/**'],
+      include: ['src/lib/**', 'src/stores/**', 'src/content/**'],
     },
   },
 });

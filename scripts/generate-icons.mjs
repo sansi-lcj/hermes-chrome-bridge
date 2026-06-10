@@ -5,15 +5,17 @@
 // Run with: npm run icons
 
 import { deflateSync } from 'node:zlib';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const OUT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'icons');
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const OUT_DIR = resolve(ROOT, 'icons');
 const SIZES = [16, 32, 48, 128];
 
-// Brand colors (match styles.css --accent).
-const BG = [0x58, 0x65, 0xf2];
+// Brand accent from the single source of truth (also used by the panel theme).
+const { accent } = JSON.parse(readFileSync(resolve(ROOT, 'src/brand.json'), 'utf8'));
+const BG = [1, 3, 5].map((i) => parseInt(accent.slice(i, i + 2), 16));
 const FG = [0xff, 0xff, 0xff];
 
 /** Render one size to an RGBA Uint8Array. */

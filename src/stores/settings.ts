@@ -1,13 +1,13 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import { connectionOf, loadAccounts, newAccountId, saveAccounts } from '../lib/accounts';
 import {
-  DEFAULT_SETTINGS,
-  type Account,
-  type AccountsState,
-  type ChatMode,
-  type Settings,
-} from '../lib/types';
+  connectionOf,
+  emptyAccounts,
+  loadAccounts,
+  newAccountId,
+  saveAccounts,
+} from '../lib/accounts';
+import type { Account, AccountsState, ChatMode } from '../lib/types';
 
 interface SettingsState {
   accounts: Account[];
@@ -33,12 +33,8 @@ function flat(state: AccountsState) {
 
 export const useSettingsStore = create<SettingsState>()(
   subscribeWithSelector((set, get) => ({
-    accounts: [],
-    activeId: null,
+    ...flat(emptyAccounts()),
     loaded: false,
-    ...DEFAULT_SETTINGS,
-    baseUrl: '',
-    apiKey: '',
 
     apply: (state) => set(flat(state)),
 
@@ -66,16 +62,6 @@ export const useSettingsStore = create<SettingsState>()(
     },
   })),
 );
-
-export function activeAccount(): Account | null {
-  const { accounts, activeId } = useSettingsStore.getState();
-  return accounts.find((a) => a.id === activeId) ?? null;
-}
-
-export function settingsValues(): Settings {
-  const { baseUrl, apiKey, defaultModel, mode } = useSettingsStore.getState();
-  return { baseUrl, apiKey, defaultModel, mode };
-}
 
 export function isConfigured(): boolean {
   const { baseUrl, apiKey } = useSettingsStore.getState();

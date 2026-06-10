@@ -5,14 +5,20 @@
 import { shallow } from 'zustand/shallow';
 import { onAccountsChanged } from '../lib/accounts';
 import { saveConversation } from '../lib/conversation';
-import { initChat, loadActiveConversation, loadModels, useChatStore } from './chat';
+import {
+  getConversationAccountId,
+  initChat,
+  loadActiveConversation,
+  loadModels,
+  useChatStore,
+} from './chat';
 import { useCatalogStore } from './catalog';
 import { isConfigured, useSettingsStore } from './settings';
 import { useUiStore } from './ui';
 
 export { useChatStore } from './chat';
 export { useCatalogStore } from './catalog';
-export { useSettingsStore, activeAccount } from './settings';
+export { useSettingsStore } from './settings';
 export { useSettingsFormStore } from './settingsForm';
 export { useUiStore } from './ui';
 export type { Tab } from './ui';
@@ -30,7 +36,10 @@ export function initStores(): void {
   // active connection changes.
   useSettingsStore.subscribe(
     (s) => [s.defaultModel, s.mode] as const,
-    ([defaultModel, mode]) => useChatStore.setState({ model: defaultModel, mode }),
+    ([defaultModel, mode]) => {
+      useChatStore.setState({ model: defaultModel });
+      useChatStore.getState().setMode(mode); // via the action: keeps Run/Tools exclusive
+    },
     { equalityFn: shallow },
   );
   useSettingsStore.subscribe(
@@ -64,12 +73,14 @@ export function initStores(): void {
     },
   );
 
-  // Persist the active account's conversation whenever a turn completes.
+  // Persist the conversation whenever a turn completes — under the account the
+  // messages belong to (not the currently active one, which may already have
+  // changed mid-stream during an account switch).
   useChatStore.subscribe(
     (s) => ({ streaming: s.streaming, messages: s.messages }),
     ({ streaming, messages }) => {
       if (!streaming && messages.length > 0) {
-        void saveConversation(useSettingsStore.getState().activeId, messages);
+        void saveConversation(getConversationAccountId(), messages);
       }
     },
     { equalityFn: shallow },

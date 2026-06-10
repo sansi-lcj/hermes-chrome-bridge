@@ -29,7 +29,7 @@ All Hermes network calls run in the **background service worker**, which holds t
 ## Requirements
 
 - A reachable Hermes Agent API server (`API_SERVER_ENABLED=true`, an `API_SERVER_KEY`, default port `8642`). Any OpenAI-compatible server works for smoke-testing the chat path.
-- Node.js 18+ and Chrome 114+ (side panel support).
+- Node.js 20+ and Chrome 114+ (side panel support).
 
 ## Install (from source)
 
@@ -117,7 +117,8 @@ sidepanel (React) ⇄ Port ⇄ background SW ⇄ fetch/SSE ⇄ Hermes API
 ```
 
 - `src/lib/hermesClient.ts` — typed API client + incremental SSE decoder
-- `src/lib/storage.ts`, `src/lib/conversation.ts` — settings & chat persistence
+- `src/lib/accounts.ts`, `src/lib/conversation.ts` — account & per-account chat
+  persistence (`storage.ts` is the account-agnostic facade over the active one)
 - `src/background/index.ts` — owns all Hermes access, streams over a Port
 - `src/content/index.ts` — supplies page context on demand
 - `src/stores/**` — **Zustand** stores: `settings`, `ui`, `catalog`,
