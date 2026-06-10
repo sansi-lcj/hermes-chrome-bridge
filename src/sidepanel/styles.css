@@ -241,6 +241,95 @@ body {
   margin-top: 2px;
 }
 
+/* Conversation list (drawer) */
+.conv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.conv-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+.conv-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.conv-card.active {
+  border-color: rgba(88, 101, 242, 0.8);
+  background: rgba(88, 101, 242, 0.1);
+}
+.conv-title {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Per-message actions (copy / regenerate / delete) */
+.msg-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.msg-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0.55;
+  transition: opacity 0.15s;
+}
+.msg-actions:hover {
+  opacity: 1;
+}
+
+/* System prompt editor (header popover) */
+.system-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 280px;
+}
+.system-set {
+  color: var(--accent, #5865f2) !important;
+}
+
+/* Code blocks with a Copy button */
+.codeblock {
+  position: relative;
+  margin: 0 0 8px;
+}
+.codeblock pre {
+  margin: 0;
+}
+.md-copy {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 1px 8px;
+  color: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 5px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.codeblock:hover .md-copy {
+  opacity: 1;
+}
+.md-copy:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
 /* Multi-account list */
 .account-list {
   display: flex;

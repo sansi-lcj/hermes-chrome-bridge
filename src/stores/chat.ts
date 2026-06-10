@@ -1,11 +1,21 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { onDeviceAvailable, onDevicePromptStream } from '../lib/builtinAI';
-import { clearConversation, loadConversation, type StoredMessage } from '../lib/conversation';
+import {
+  loadIndex,
+  loadMessages,
+  newConversationId,
+  removeMessages,
+  saveIndex,
+  titleFrom,
+  type ConversationMeta,
+  type StoredMessage,
+} from '../lib/conversation';
 import { sendRuntime } from '../lib/messaging';
 import { takePendingNewChat, takePendingPrompt } from '../lib/pending';
 import type {
   BackgroundToUi,
+  ChatMessage,
   ChatMode,
   ModelInfo,
   PageContext,
@@ -24,8 +34,8 @@ let odToken = 0;
 /** Guards the async page-context fetch so a double-submit can't dispatch twice. */
 let sendInFlight = false;
 /**
- * The account whose conversation is currently in `messages`. Captured at load
- * time (not read from the settings store at save time) so persistence can never
+ * The account whose conversations are currently loaded. Captured at load time
+ * (not read from the settings store at save time) so persistence can never
  * write one account's history under another's key during an account switch.
  */
 let conversationAccountId: string | null = null;
@@ -37,6 +47,12 @@ export function getConversationAccountId(): string | null {
 
 interface ChatState {
   messages: StoredMessage[];
+  /** The account's conversation list, most recent first. */
+  conversations: ConversationMeta[];
+  /** Active conversation id; null = a draft chat not yet materialized. */
+  conversationId: string | null;
+  /** The active conversation's system prompt (sent ahead of the history). */
+  system: string;
   input: string;
   mode: ChatMode;
   model: string;
@@ -59,15 +75,27 @@ interface ChatState {
   setOnDevice: (v: boolean) => void;
   setAgentTools: (v: boolean) => void;
   setAutoApprove: (v: boolean) => void;
+  setSystem: (v: string) => void;
   resolveConfirm: (approved: boolean) => void;
   sendMessage: (text: string) => void;
+  /** Re-ask the last user message, replacing the answer below it. */
+  regenerate: () => void;
+  /** Remove one message from the conversation. */
+  deleteMessage: (index: number) => void;
   stop: () => void;
+  /** Start a fresh draft chat (materialized on the first message). */
   newChat: () => void;
+  selectConversation: (id: string) => Promise<void>;
+  renameConversation: (id: string, title: string) => void;
+  deleteConversation: (id: string) => Promise<void>;
 }
 
 export const useChatStore = create<ChatState>()(
   subscribeWithSelector((set, get) => ({
     messages: [],
+    conversations: [],
+    conversationId: null,
+    system: '',
     input: '',
     mode: useSettingsStore.getState().mode,
     model: useSettingsStore.getState().defaultModel,
@@ -89,6 +117,14 @@ export const useChatStore = create<ChatState>()(
     setOnDevice: (onDevice) => set({ onDevice }),
     setAgentTools: (agentTools) => set(agentTools ? { agentTools, mode: 'chat' } : { agentTools }),
     setAutoApprove: (autoApproveActions) => set({ autoApproveActions }),
+    setSystem: (system) => {
+      const { conversationId, conversations } = get();
+      set({ system });
+      if (conversationId) {
+        set({ conversations: patchMeta(conversations, conversationId, { system }) });
+        void persistIndex();
+      }
+    },
     resolveConfirm: (approved) => {
       const pc = get().pendingConfirm;
       if (!pc) return;
@@ -112,6 +148,19 @@ export const useChatStore = create<ChatState>()(
       }
     },
 
+    regenerate: () => {
+      const s = get();
+      if (s.streaming) return;
+      const lastUser = s.messages.map((m) => m.role).lastIndexOf('user');
+      if (lastUser === -1) return;
+      startStream(s.messages.slice(0, lastUser + 1));
+    },
+
+    deleteMessage: (index) => {
+      if (get().streaming) return;
+      set({ messages: get().messages.filter((_, i) => i !== index) });
+    },
+
     stop: () => {
       odToken++; // cancel any on-device stream
       if (activeReq) sendPort({ type: 'cancel', requestId: activeReq });
@@ -120,8 +169,44 @@ export const useChatStore = create<ChatState>()(
 
     newChat: () => {
       if (get().streaming) get().stop();
-      set({ messages: [], pendingConfirm: null });
-      void clearConversation(conversationAccountId);
+      // A draft: no storage is touched until the first message materializes it.
+      set({ messages: [], conversationId: null, system: '', input: '', pendingConfirm: null });
+    },
+
+    selectConversation: async (id) => {
+      const s = get();
+      if (id === s.conversationId) return;
+      if (s.streaming) s.stop();
+      const messages = await loadMessages(conversationAccountId, id);
+      const meta = get().conversations.find((c) => c.id === id);
+      set({ messages, conversationId: id, system: meta?.system ?? '', pendingConfirm: null });
+      void persistIndex();
+    },
+
+    renameConversation: (id, title) => {
+      const clean = title.trim();
+      if (!clean) return;
+      set({ conversations: patchMeta(get().conversations, id, { title: clean }) });
+      void persistIndex();
+    },
+
+    deleteConversation: async (id) => {
+      const s = get();
+      await removeMessages(conversationAccountId, id);
+      const conversations = s.conversations.filter((c) => c.id !== id);
+      if (s.conversationId === id) {
+        if (s.streaming) s.stop();
+        set({
+          conversations,
+          conversationId: null,
+          messages: [],
+          system: '',
+          pendingConfirm: null,
+        });
+      } else {
+        set({ conversations });
+      }
+      void persistIndex();
     },
   })),
 );
@@ -130,13 +215,49 @@ export const useChatStore = create<ChatState>()(
 // Streaming + Port machinery (module-scoped; not part of the reactive state)
 // ---------------------------------------------------------------------------
 
+function patchMeta(
+  conversations: ConversationMeta[],
+  id: string,
+  patch: Partial<ConversationMeta>,
+): ConversationMeta[] {
+  return conversations.map((c) => (c.id === id ? { ...c, ...patch } : c));
+}
+
+/** Persist the conversation list + active id for the loaded account. */
+async function persistIndex(): Promise<void> {
+  const { conversations, conversationId } = useChatStore.getState();
+  await saveIndex(conversationAccountId, { conversations, activeId: conversationId });
+}
+
+/** Append the user turn (materializing a draft conversation) and stream. */
 function dispatch(content: string): void {
   const s = useChatStore.getState();
-  const messages: StoredMessage[] = [
-    ...s.messages,
-    { role: 'user', content },
-    { role: 'assistant', content: '', tools: [] },
-  ];
+  if (!s.conversationId) {
+    // First message of a draft: create the conversation, newest first.
+    const meta: ConversationMeta = {
+      id: newConversationId(),
+      title: titleFrom(content),
+      updatedAt: Date.now(),
+      system: s.system || undefined,
+    };
+    useChatStore.setState({
+      conversationId: meta.id,
+      conversations: [meta, ...s.conversations],
+    });
+  } else {
+    const touched = patchMeta(s.conversations, s.conversationId, { updatedAt: Date.now() });
+    // Most-recent-first, like any chat list.
+    touched.sort((a, b) => b.updatedAt - a.updatedAt);
+    useChatStore.setState({ conversations: touched });
+  }
+  void persistIndex();
+  startStream([...s.messages, { role: 'user', content }]);
+}
+
+/** Stream an answer for the given history (appends the assistant placeholder). */
+function startStream(history: StoredMessage[]): void {
+  const s = useChatStore.getState();
+  const messages: StoredMessage[] = [...history, { role: 'assistant', content: '', tools: [] }];
   useChatStore.setState({ messages, input: '', streaming: true, pendingConfirm: null });
 
   // On-device answering applies only when tools aren't requested.
@@ -147,6 +268,10 @@ function dispatch(content: string): void {
 
   const requestId = nextId();
   activeReq = requestId;
+  const payload: ChatMessage[] = history
+    .filter((m) => m.role !== 'assistant' || m.content.length > 0)
+    .map((m) => ({ role: m.role, content: m.content }));
+  if (s.system.trim()) payload.unshift({ role: 'system', content: s.system.trim() });
   sendPort({
     type: 'chat.start',
     requestId,
@@ -154,9 +279,7 @@ function dispatch(content: string): void {
     useRun: s.mode === 'run',
     useTools: s.agentTools,
     autoApprove: s.autoApproveActions,
-    messages: messages
-      .filter((m) => m.role !== 'assistant' || m.content.length > 0)
-      .map((m) => ({ role: m.role, content: m.content })),
+    messages: payload,
   });
 }
 
@@ -233,16 +356,25 @@ export async function loadModels(): Promise<void> {
   }
 }
 
-/** Load the active account's conversation, resetting any in-flight state.
+/** Load the active account's conversations, resetting any in-flight state.
  *  Called on startup and whenever the active account changes. */
 export async function loadActiveConversation(): Promise<void> {
   const token = ++convLoadToken;
   useChatStore.getState().stop();
   const accountId = useSettingsStore.getState().activeId;
-  const messages = await loadConversation(accountId);
+  const index = await loadIndex(accountId);
+  const messages = await loadMessages(accountId, index.activeId);
   if (token !== convLoadToken) return; // superseded by a newer account switch
   conversationAccountId = accountId;
-  useChatStore.setState({ messages, input: '', pendingConfirm: null });
+  const meta = index.conversations.find((c) => c.id === index.activeId);
+  useChatStore.setState({
+    messages,
+    conversations: [...index.conversations].sort((a, b) => b.updatedAt - a.updatedAt),
+    conversationId: index.activeId,
+    system: meta?.system ?? '',
+    input: '',
+    pendingConfirm: null,
+  });
 }
 
 async function detectOnDevice(): Promise<void> {
@@ -250,13 +382,11 @@ async function detectOnDevice(): Promise<void> {
 }
 
 async function runOnDevice(token: number): Promise<void> {
-  const transcript = useChatStore
-    .getState()
-    .messages.filter((m) => m.content.length > 0)
-    .map((m) => `${m.role}: ${m.content}`)
-    .join('\n');
+  const { messages, system } = useChatStore.getState();
+  const lines = messages.filter((m) => m.content.length > 0).map((m) => `${m.role}: ${m.content}`);
+  if (system.trim()) lines.unshift(`system: ${system.trim()}`);
   try {
-    for await (const chunk of onDevicePromptStream(transcript)) {
+    for await (const chunk of onDevicePromptStream(lines.join('\n'))) {
       if (token !== odToken) break; // cancelled
       patchLastAssistant((last) => ({ ...last, content: last.content + chunk }));
     }

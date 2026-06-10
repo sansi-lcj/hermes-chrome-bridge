@@ -8,8 +8,10 @@ The UI is built on **[Ant Design X](https://x.ant.design/)** — Ant Design's co
 
 ## Features
 
-- **Side-panel chat** on Ant Design X with live token streaming (SSE), **Markdown rendering** (code blocks, lists, links), and a `ThoughtChain` tool-progress trail.
-- **Conversation persistence** — your chat survives closing the panel; start fresh with **New chat**.
+- **Side-panel chat** on Ant Design X with live token streaming (SSE), **Markdown rendering** (code blocks with one-click copy, lists, links), and a `ThoughtChain` tool-progress trail.
+- **Conversations, Chatbox-style** — every account keeps a full conversation list (auto-titled, renamable, deletable) in a drawer; **New chat** starts fresh without losing anything, and history survives closing the panel.
+- **Message actions** — copy any message, **regenerate** the last answer, or delete a turn.
+- **Per-conversation system prompt** — set standing instructions from the header; they ride ahead of every message of that chat.
 - **Page context** — attach the current tab's selection or readable text to your message.
 - **Runs mode** — drive long, autonomous tasks via the `/v1/runs` API. Runs keep going even if you close the panel and notify you when finished.
 - **Agent tools** — toggle **Tools** to let the agent operate your browser via function calling: **perceive** the page (`get_page_elements`, `read_active_page`, `list_tabs`) and **act** on it (`click_element`, `type_text`, `scroll_page`, `navigate_to`, `open_url`). Each tool step shows in the tool trail. Write/action tools prompt for **Allow/Deny** by default (an **Auto-run** toggle skips prompts). Uses already-granted permissions only.

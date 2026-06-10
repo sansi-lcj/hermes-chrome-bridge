@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from 'vitest';
-import { render } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render } from '@testing-library/react';
 import { Markdown } from './Markdown';
 
 describe('Markdown', () => {
@@ -26,5 +26,17 @@ describe('Markdown', () => {
   it('renders fenced code blocks', () => {
     const { container } = render(<Markdown text={'```\nconst x = 1;\n```'} />);
     expect(container.querySelector('pre code')?.textContent).toContain('const x = 1;');
+  });
+
+  it('adds a working Copy button to code blocks', async () => {
+    const writeText = vi.fn(async () => {});
+    Object.assign(navigator, { clipboard: { writeText } });
+
+    const { container } = render(<Markdown text={'```\nconst x = 1;\n```'} />);
+    const btn = container.querySelector('.md-copy');
+    expect(btn?.textContent).toBe('Copy');
+
+    fireEvent.click(btn!);
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('const x = 1;'));
   });
 });

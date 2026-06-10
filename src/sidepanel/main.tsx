@@ -11,6 +11,9 @@ import './styles.css';
 // Load settings, connect the Port, and wire cross-store subscriptions once.
 initStores();
 
+// Expose the brand accent to the stylesheet (single source: src/brand.json).
+document.documentElement.style.setProperty('--accent', brand.accent);
+
 /** Hand antd's context-aware message instance to non-component code (stores). */
 function FeedbackBridge() {
   const { message } = AntApp.useApp();
