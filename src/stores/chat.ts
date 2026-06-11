@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import { onDeviceAvailable, onDevicePromptStream } from '../lib/builtinAI';
+import { createChatPort, type ChatPort } from '../lib/chatPort';
+import { buildPrompt, cancelOnDevice, onDeviceAvailable, runOnDevice } from '../lib/onDeviceChat';
 import {
   loadIndex,
   loadMessages,
@@ -40,9 +41,8 @@ import { useSettingsStore } from './settings';
 const nextId = () => `req-${crypto.randomUUID()}`;
 
 // Non-reactive internals (the Chrome Port is not UI state).
-let port: chrome.runtime.Port | null = null;
+let chatPort: ChatPort | null = null;
 let activeReq: string | null = null;
-let odToken = 0;
 /** Guards the async page-context fetch so a double-submit can't dispatch twice. */
 let sendInFlight = false;
 /**
@@ -215,7 +215,7 @@ export const useChatStore = create<ChatState>()(
     },
 
     stop: () => {
-      odToken++; // cancel any on-device stream
+      cancelOnDevice(); // cancel any on-device stream
       if (activeReq) sendPort({ type: 'cancel', requestId: activeReq });
       set({ streaming: false });
     },
@@ -405,7 +405,14 @@ function startStream(history: StoredMessage[]): void {
 
   // On-device answering applies only when tools aren't requested.
   if (s.onDevice && s.onDeviceSupported && !s.agentTools) {
-    void runOnDevice(++odToken);
+    const { messages: current, system } = useChatStore.getState();
+    void runOnDevice(
+      buildPrompt(current, system),
+      (chunk) => patchLastAssistant((last) => ({ ...last, content: last.content + chunk })),
+      (message) =>
+        patchLastAssistant((last) => ({ ...last, content: last.content + `\n\n> ⚠️ ${message}` })),
+      () => useChatStore.setState({ streaming: false }),
+    );
     return;
   }
 
@@ -457,37 +464,27 @@ export function onPortMessage(msg: BackgroundToUi): void {
   }
 }
 
-const RECONNECT_BASE_MS = 250;
-const RECONNECT_MAX_MS = 5_000;
-let reconnectDelay = RECONNECT_BASE_MS;
+/** The background aborts our in-flight stream when the port drops (e.g. the MV3
+ *  worker was recycled), so no chat.done will ever arrive — surface the
+ *  interruption instead of spinning forever. */
+function onPortDisconnect(): void {
+  if (!activeReq) return;
+  activeReq = null;
+  patchLastAssistant((last) => ({
+    ...last,
+    content: last.content + '\n\n> ⚠️ Connection lost — response interrupted.',
+  }));
+  useChatStore.setState({ streaming: false, pendingConfirm: null });
+}
 
-function connect(): void {
-  port = chrome.runtime.connect({ name: 'hermes' });
-  port.onMessage.addListener((msg: BackgroundToUi) => {
-    reconnectDelay = RECONNECT_BASE_MS; // traffic means the link is healthy
-    onPortMessage(msg);
-  });
-  port.onDisconnect.addListener(() => {
-    port = null;
-    // The background aborts our in-flight stream when the port drops (e.g. the
-    // MV3 worker was recycled), so no chat.done will ever arrive — surface the
-    // interruption instead of spinning forever.
-    if (activeReq) {
-      activeReq = null;
-      patchLastAssistant((last) => ({
-        ...last,
-        content: last.content + '\n\n> ⚠️ Connection lost — response interrupted.',
-      }));
-      useChatStore.setState({ streaming: false, pendingConfirm: null });
-    }
-    setTimeout(connect, reconnectDelay);
-    reconnectDelay = Math.min(reconnectDelay * 2, RECONNECT_MAX_MS); // back off
-  });
+/** The Port to the background, created lazily on first use. */
+function port(): ChatPort {
+  if (!chatPort) chatPort = createChatPort(onPortMessage, onPortDisconnect);
+  return chatPort;
 }
 
 function sendPort(msg: UiToBackground): void {
-  if (!port) connect();
-  port?.postMessage(msg);
+  port().send(msg);
 }
 
 export async function loadModels(): Promise<void> {
@@ -527,22 +524,6 @@ async function detectOnDevice(): Promise<void> {
   useChatStore.setState({ onDeviceSupported: await onDeviceAvailable() });
 }
 
-async function runOnDevice(token: number): Promise<void> {
-  const { messages, system } = useChatStore.getState();
-  const lines = messages.filter((m) => m.content.length > 0).map((m) => `${m.role}: ${m.content}`);
-  if (system.trim()) lines.unshift(`system: ${system.trim()}`);
-  try {
-    for await (const chunk of onDevicePromptStream(lines.join('\n'))) {
-      if (token !== odToken) break; // cancelled
-      patchLastAssistant((last) => ({ ...last, content: last.content + chunk }));
-    }
-  } catch (e) {
-    patchLastAssistant((last) => ({ ...last, content: last.content + `\n\n> ⚠️ ${String(e)}` }));
-  } finally {
-    if (token === odToken) useChatStore.setState({ streaming: false });
-  }
-}
-
 /** Consume any pending panel actions (stored once, applied exactly once). */
 async function consumePending(): Promise<void> {
   if (await takePendingNewChat()) useChatStore.getState().newChat();
@@ -570,7 +551,7 @@ function onBroadcast(msg: PanelBroadcast): void {
 
 /** Wire side effects: Port, persisted history, on-device detection, prompts. */
 export function initChat(): void {
-  connect();
+  port(); // connect eagerly so streamed pokes have a live link
   // The active account's conversation is loaded by the activeId subscription in
   // stores/index once accounts have loaded.
   void detectOnDevice();
