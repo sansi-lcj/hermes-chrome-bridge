@@ -41,6 +41,12 @@ All Hermes network calls run in the **background service worker**, which holds t
 - A reachable Hermes Agent API server (`API_SERVER_ENABLED=true`, an `API_SERVER_KEY`, default port `8642`). Any OpenAI-compatible server works for smoke-testing the chat path.
 - Node.js 20+ and Chrome 114+ (side panel support).
 
+## Connecting
+
+- **Provision a channel for a user** (server side): [`docs/HERMES_SETUP.md`](docs/HERMES_SETUP.md) — the API contract, enabling the server, and verification.
+- **Per-user revocable keys** in front of a single-key server: [`deploy/`](deploy/README.md) — ready Caddy / nginx reverse-proxy configs (SSE-safe).
+- **Hand to the end user**: [`docs/CONNECT.md`](docs/CONNECT.md) — a 2-minute "add account → Test connection" page.
+
 ## Install (from source)
 
 ```bash

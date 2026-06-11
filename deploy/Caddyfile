@@ -1,0 +1,41 @@
+# Per-user channel proxy in front of a single-key Hermes API server.
+#
+#   caddy run --config deploy/Caddyfile
+#
+# Requires the env var HERMES_UPSTREAM_KEY set to the Hermes API_SERVER_KEY.
+# Caddy obtains and renews TLS for the domain automatically.
+
+hermes.example.com {
+
+	# --- Issued per-user tokens (the extension's "API key") -------------------
+	# Add or remove users here, then `caddy reload`. These are the tokens you
+	# hand out (e.g. tok_alice_…), NOT the upstream master key.
+	@valid `{http.request.header.Authorization}.startsWith("Bearer ") && {http.request.header.Authorization} in [
+		"Bearer tok_alice_REPLACE_ME",
+		"Bearer tok_bob_REPLACE_ME"
+	]`
+
+	handle @valid {
+		# Swap the user's token for the real upstream key, then forward.
+		request_header Authorization "Bearer {env.HERMES_UPSTREAM_KEY}"
+
+		reverse_proxy 127.0.0.1:8642 {
+			# Stream SSE immediately — never buffer /v1/chat/completions or
+			# /v1/runs/{id}/events.
+			flush_interval -1
+		}
+	}
+
+	# Anything without a recognized token is rejected.
+	handle {
+		respond "Unauthorized" 401
+	}
+
+	# Don't write bearer tokens to disk.
+	log {
+		output stderr
+		format filter {
+			request>headers>Authorization delete
+		}
+	}
+}
