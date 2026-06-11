@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Button, Checkbox, Empty, Input, Popconfirm, Space, Typography } from 'antd';
-import { DeleteOutlined, EditOutlined, LockFilled, PlusOutlined } from '@ant-design/icons';
+import { Button, Checkbox, Empty, Input, Space, Typography } from 'antd';
+import { LockFilled, PlusOutlined } from '@ant-design/icons';
 import { useShallow } from 'zustand/react/shallow';
 import { useProfilesStore } from '../../stores';
 import type { SiteProfile } from '../../lib/profiles';
+import { EntityCard } from './EntityCard';
 
 interface Draft {
   id: string | null;
@@ -155,41 +156,24 @@ function ProfileCard({
   onDelete: () => void;
 }) {
   return (
-    <div className="account-card">
-      <div className="account-main">
-        <div className="account-name">
+    <EntityCard
+      noun={`profile ${profile.label}`}
+      deleteTitle="Delete this profile?"
+      title={
+        <>
           {profile.private && <LockFilled style={{ color: '#f5bf4f' }} />}
           {profile.label}
-        </div>
-        <div className="account-sub">
+        </>
+      }
+      subtitle={
+        <>
           {profile.host}
           {profile.autoPageContext ? ' · page context' : ''}
           {profile.private ? ' · on-device' : ''}
-        </div>
-      </div>
-      <Space>
-        <Button
-          size="small"
-          type="text"
-          icon={<EditOutlined />}
-          aria-label={`Edit profile ${profile.label}`}
-          onClick={onEdit}
-        />
-        <Popconfirm
-          title="Delete this profile?"
-          okText="Delete"
-          okButtonProps={{ danger: true }}
-          onConfirm={onDelete}
-        >
-          <Button
-            size="small"
-            type="text"
-            danger
-            icon={<DeleteOutlined />}
-            aria-label={`Delete profile ${profile.label}`}
-          />
-        </Popconfirm>
-      </Space>
-    </div>
+        </>
+      }
+      onEdit={onEdit}
+      onDelete={onDelete}
+    />
   );
 }

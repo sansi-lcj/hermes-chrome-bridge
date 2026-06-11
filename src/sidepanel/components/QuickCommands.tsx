@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Button, Empty, Input, Popconfirm, Space, Typography } from 'antd';
-import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
+import { Button, Empty, Input, Space, Typography } from 'antd';
+import { PlusOutlined } from '@ant-design/icons';
 import { useShallow } from 'zustand/react/shallow';
 import { useTemplatesStore } from '../../stores';
 import type { PromptTemplate } from '../../lib/templates';
+import { EntityCard } from './EntityCard';
 
 interface Draft {
   id: string | null;
@@ -119,34 +120,13 @@ function CommandCard({
   onDelete: () => void;
 }) {
   return (
-    <div className="account-card">
-      <div className="account-main">
-        <div className="account-name">/{template.name}</div>
-        <div className="account-sub">{template.description || template.body.slice(0, 60)}</div>
-      </div>
-      <Space>
-        <Button
-          size="small"
-          type="text"
-          icon={<EditOutlined />}
-          aria-label={`Edit command ${template.name}`}
-          onClick={onEdit}
-        />
-        <Popconfirm
-          title="Delete this command?"
-          okText="Delete"
-          okButtonProps={{ danger: true }}
-          onConfirm={onDelete}
-        >
-          <Button
-            size="small"
-            type="text"
-            danger
-            icon={<DeleteOutlined />}
-            aria-label={`Delete command ${template.name}`}
-          />
-        </Popconfirm>
-      </Space>
-    </div>
+    <EntityCard
+      noun={`command ${template.name}`}
+      deleteTitle="Delete this command?"
+      title={`/${template.name}`}
+      subtitle={template.description || template.body.slice(0, 60)}
+      onEdit={onEdit}
+      onDelete={onDelete}
+    />
   );
 }

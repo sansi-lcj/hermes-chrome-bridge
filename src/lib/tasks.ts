@@ -3,6 +3,8 @@
 // X") and lightweight monitoring ("every hour, check Y and tell me if it
 // changed"). Backed by chrome.alarms; stored under `scheduledTasks`.
 
+import { loadCollection, makeId, saveCollection } from './collection';
+
 export interface ScheduledTask {
   id: string;
   /** Friendly name shown in the list and notification title. */
@@ -23,9 +25,7 @@ const ALARM_PREFIX = 'task:';
 /** Chrome won't schedule periodic alarms faster than once per minute. */
 export const MIN_INTERVAL_MINUTES = 1;
 
-export function newTaskId(): string {
-  return `task-${crypto.randomUUID()}`;
-}
+export const newTaskId = (): string => makeId('task');
 
 export const taskAlarmName = (id: string): string => `${ALARM_PREFIX}${id}`;
 
@@ -41,15 +41,9 @@ export function normalizeInterval(minutes: number): number {
     : MIN_INTERVAL_MINUTES;
 }
 
-export async function loadTasks(): Promise<ScheduledTask[]> {
-  const res = await chrome.storage.local.get(KEY);
-  const stored = res[KEY] as ScheduledTask[] | undefined;
-  return Array.isArray(stored) ? stored : [];
-}
+export const loadTasks = (): Promise<ScheduledTask[]> => loadCollection<ScheduledTask>(KEY);
 
-export async function saveTasks(tasks: ScheduledTask[]): Promise<void> {
-  await chrome.storage.local.set({ [KEY]: tasks });
-}
+export const saveTasks = (tasks: ScheduledTask[]): Promise<void> => saveCollection(KEY, tasks);
 
 /** Update one task in storage (read-modify-write); used by the background tick. */
 export async function patchTask(id: string, patch: Partial<ScheduledTask>): Promise<void> {
