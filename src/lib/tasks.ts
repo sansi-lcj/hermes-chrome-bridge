@@ -17,7 +17,8 @@ export interface ScheduledTask {
   lastResult?: string;
 }
 
-const KEY = 'scheduledTasks';
+export const TASKS_KEY = 'scheduledTasks';
+const KEY = TASKS_KEY;
 const ALARM_PREFIX = 'task:';
 /** Chrome won't schedule periodic alarms faster than once per minute. */
 export const MIN_INTERVAL_MINUTES = 1;
@@ -54,8 +55,4 @@ export async function saveTasks(tasks: ScheduledTask[]): Promise<void> {
 export async function patchTask(id: string, patch: Partial<ScheduledTask>): Promise<void> {
   const tasks = await loadTasks();
   await saveTasks(tasks.map((t) => (t.id === id ? { ...t, ...patch } : t)));
-}
-
-export function isTasksKey(key: string): boolean {
-  return key === KEY;
 }

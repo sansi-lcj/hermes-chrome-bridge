@@ -12,10 +12,10 @@ vi.stubGlobal('chrome', {
 
 const {
   MIN_INTERVAL_MINUTES,
+  TASKS_KEY,
   taskAlarmName,
   taskIdFromAlarm,
   normalizeInterval,
-  isTasksKey,
   loadTasks,
   saveTasks,
   patchTask,
@@ -52,10 +52,9 @@ describe('normalizeInterval', () => {
   });
 });
 
-describe('isTasksKey', () => {
-  it('identifies the storage key', () => {
-    expect(isTasksKey('scheduledTasks')).toBe(true);
-    expect(isTasksKey('siteProfiles')).toBe(false);
+describe('TASKS_KEY', () => {
+  it('is the storage key tasks are persisted under', () => {
+    expect(TASKS_KEY).toBe('scheduledTasks');
   });
 });
 

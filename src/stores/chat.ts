@@ -59,7 +59,7 @@ export function getConversationAccountId(): string | null {
   return conversationAccountId;
 }
 
-interface ChatState {
+export interface ChatState {
   messages: StoredMessage[];
   /** The account's conversation list, most recent first. */
   conversations: ConversationMeta[];

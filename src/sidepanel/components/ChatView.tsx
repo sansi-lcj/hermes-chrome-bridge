@@ -1,10 +1,11 @@
-import { Button, Input, Popover, Select, Tooltip, Typography } from 'antd';
+import { Button, Input, Popover, Select, Tag, Tooltip, Typography } from 'antd';
 import {
   CommentOutlined,
   CopyOutlined,
   DeleteOutlined,
   EditOutlined,
   FileTextOutlined,
+  LockFilled,
   ReloadOutlined,
   RobotOutlined,
   ThunderboltOutlined,
@@ -13,8 +14,6 @@ import {
 } from '@ant-design/icons';
 import { Bubble, Prompts, ThoughtChain, Welcome } from '@ant-design/x';
 import type { BubbleItemType, BubbleListProps } from '@ant-design/x';
-import { LockFilled } from '@ant-design/icons';
-import { Tag } from 'antd';
 import { useShallow } from 'zustand/react/shallow';
 import { actionSummary } from '../../lib/actionSummary';
 import { feedback } from '../../lib/feedback';

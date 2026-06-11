@@ -14,10 +14,10 @@ import { setPendingNewChat, setPendingPrompt } from '../lib/pending';
 import { addRun, listRuns, removeRun } from '../lib/runRegistry';
 import { getSettings } from '../lib/storage';
 import {
-  isTasksKey,
   loadTasks,
   normalizeInterval,
   patchTask,
+  TASKS_KEY,
   taskAlarmName,
   taskIdFromAlarm,
 } from '../lib/tasks';
@@ -39,11 +39,25 @@ const MENU_QUOTE = 'hermes-quote-selection';
 const MENU_SUMMARIZE = 'hermes-summarize-page';
 /** Tool-call args shown in the progress trail are truncated to this length. */
 const ARGS_PREVIEW_CHARS = 120;
-/** Desktop notifications show at most this much of the Run's answer. */
-const NOTIFY_SNIPPET_CHARS = 180;
+/** Desktop notifications show at most this much of the body text. */
+const NOTIFY_BODY_CHARS = 250;
+
+/** A signal for fire-and-forget background work that is never cancelled. */
+const NEVER_ABORT = new AbortController().signal;
 
 async function client(): Promise<HermesClient> {
   return new HermesClient(await getSettings());
+}
+
+/** Raise a desktop notification; clicking it opens the panel. */
+function notify(title: string, body: string): void {
+  chrome.notifications.create({
+    type: 'basic',
+    iconUrl: chrome.runtime.getURL('icons/icon-128.png'),
+    title,
+    message: body.trim().slice(0, NOTIFY_BODY_CHARS) || 'Done.',
+    priority: 1,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -221,7 +235,9 @@ async function streamRun(
   await addRun(run.id, model); // survive a service-worker restart
   try {
     channel.post({ type: 'chat.tool', requestId, progress: { message: `Run started: ${run.id}` } });
-    controller.signal.addEventListener('abort', () => void hermes.stopRun(run.id));
+    controller.signal.addEventListener('abort', () => {
+      void hermes.stopRun(run.id).catch(() => {}); // best-effort on teardown
+    });
 
     const answer = await pumpRunEvents(hermes, run.id, controller.signal, (text, ev) => {
       if (text) channel.post({ type: 'chat.delta', requestId, content: text });
@@ -230,7 +246,7 @@ async function streamRun(
     });
     channel.post({ type: 'chat.done', requestId });
     // If the panel closed mid-run, ping the user that it finished.
-    if (!channel.alive) notifyRunDone(answer);
+    if (!channel.alive) notify('Hermes finished a task', answer);
   } finally {
     await removeRun(run.id);
   }
@@ -365,17 +381,6 @@ function broadcast(msg: PanelBroadcast): void {
   chrome.runtime.sendMessage(msg).catch(() => undefined);
 }
 
-function notifyRunDone(answer: string): void {
-  const snippet = answer.trim().slice(0, NOTIFY_SNIPPET_CHARS) || 'Your task finished.';
-  chrome.notifications.create({
-    type: 'basic',
-    iconUrl: chrome.runtime.getURL('icons/icon-128.png'),
-    title: 'Hermes finished a task',
-    message: snippet,
-    priority: 1,
-  });
-}
-
 chrome.notifications.onClicked.addListener(() => openPanelSync());
 
 // ---------------------------------------------------------------------------
@@ -393,7 +398,7 @@ async function resumeOrphanedRuns(): Promise<void> {
 
 async function resumeRun(hermes: HermesClient, runId: string): Promise<void> {
   try {
-    notifyRunDone(await pumpRunEvents(hermes, runId, new AbortController().signal));
+    notify('Hermes finished a task', await pumpRunEvents(hermes, runId, NEVER_ABORT));
   } catch {
     /* run gone or unreachable — drop it */
   } finally {
@@ -407,8 +412,6 @@ void resumeOrphanedRuns();
 // ---------------------------------------------------------------------------
 // Scheduled tasks (digests / monitoring) backed by chrome.alarms
 // ---------------------------------------------------------------------------
-
-const NOTIFY_RESULT_CHARS = 250;
 
 /** Reconcile chrome.alarms with the persisted task registry. */
 async function syncTaskAlarms(): Promise<void> {
@@ -436,38 +439,32 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
 // Re-sync alarms whenever the task registry changes (e.g. edited in the panel).
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && Object.keys(changes).some(isTasksKey)) void syncTaskAlarms();
+  if (area === 'local' && TASKS_KEY in changes) void syncTaskAlarms();
 });
+
+/** Stored task results are capped so chrome.storage.local can't grow unbounded. */
+const MAX_TASK_RESULT_CHARS = 2000;
 
 async function runScheduledTask(id: string): Promise<void> {
   const task = (await loadTasks()).find((t) => t.id === id);
   if (!task || !task.enabled) return;
   try {
-    const hermes = await client();
     const settings = await getSettings();
-    const res = await hermes.chatCompletion(
+    const res = await new HermesClient(settings).chatCompletion(
       [{ role: 'user', content: task.prompt }],
       settings.defaultModel,
       undefined,
-      new AbortController().signal,
+      NEVER_ABORT,
     );
     const answer = (res.choices?.[0]?.message?.content ?? '').toString();
-    await patchTask(id, { lastRunAt: Date.now(), lastResult: answer.slice(0, 2000) });
-    notifyTaskDone(task.name, answer);
+    await patchTask(id, {
+      lastRunAt: Date.now(),
+      lastResult: answer.slice(0, MAX_TASK_RESULT_CHARS),
+    });
+    notify(`Hermes: ${task.name}`, answer);
   } catch (err) {
     await patchTask(id, { lastRunAt: Date.now(), lastResult: `⚠️ ${errorMessage(err)}` });
   }
-}
-
-function notifyTaskDone(name: string, answer: string): void {
-  const snippet = answer.trim().slice(0, NOTIFY_RESULT_CHARS) || 'Task finished.';
-  chrome.notifications.create({
-    type: 'basic',
-    iconUrl: chrome.runtime.getURL('icons/icon-128.png'),
-    title: `Hermes: ${name}`,
-    message: snippet,
-    priority: 1,
-  });
 }
 
 // Reconcile alarms on every worker startup.
