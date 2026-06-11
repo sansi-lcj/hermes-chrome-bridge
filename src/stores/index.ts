@@ -14,6 +14,7 @@ import {
 } from './chat';
 import { useCatalogStore } from './catalog';
 import { activeProfile, useProfilesStore } from './profiles';
+import { useRunsStore, watchRuns } from './runs';
 import { isConfigured, useSettingsStore } from './settings';
 import { useTasksStore, watchTasks } from './tasks';
 import { useTemplatesStore } from './templates';
@@ -22,6 +23,7 @@ import { useUiStore } from './ui';
 export { useChatStore } from './chat';
 export { useCatalogStore } from './catalog';
 export { useProfilesStore, activeProfile } from './profiles';
+export { useRunsStore } from './runs';
 export { useSettingsStore } from './settings';
 export { useSettingsFormStore } from './settingsForm';
 export { useTasksStore } from './tasks';
@@ -76,6 +78,7 @@ export function initStores(): void {
       const c = useCatalogStore.getState();
       if (tab === 'skills' && !c.skillsLoaded) void c.loadSkills();
       if (tab === 'sessions' && !c.sessionsLoaded) void c.loadSessions();
+      if (tab === 'runs') void useRunsStore.getState().load();
     },
   );
 
@@ -115,6 +118,7 @@ export function initStores(): void {
   initChat();
   initActiveTabTracking();
   watchTasks(); // reflect background-written task results back into the UI
+  watchRuns(); // reflect runs starting/finishing in the background
   void useSettingsStore.getState().load();
   void useTemplatesStore.getState().load();
   void useProfilesStore.getState().load();

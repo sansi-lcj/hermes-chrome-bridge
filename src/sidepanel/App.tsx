@@ -4,6 +4,7 @@ import {
   MessageOutlined,
   ThunderboltOutlined,
   HistoryOutlined,
+  PlayCircleOutlined,
   SettingOutlined,
 } from '@ant-design/icons';
 import { useSettingsStore, useUiStore, type Tab } from '../stores';
@@ -16,6 +17,7 @@ const SkillsView = lazy(() =>
 const SessionsView = lazy(() =>
   import('./components/SessionsView').then((m) => ({ default: m.SessionsView })),
 );
+const RunsView = lazy(() => import('./components/RunsView').then((m) => ({ default: m.RunsView })));
 const SettingsView = lazy(() =>
   import('./components/SettingsView').then((m) => ({ default: m.SettingsView })),
 );
@@ -43,6 +45,7 @@ export function App() {
           options={[
             { value: 'chat', label: 'Chat', icon: <MessageOutlined /> },
             { value: 'skills', label: 'Skills', icon: <ThunderboltOutlined /> },
+            { value: 'runs', label: 'Runs', icon: <PlayCircleOutlined /> },
             { value: 'sessions', label: 'Sessions', icon: <HistoryOutlined /> },
             { value: 'settings', label: 'Settings', icon: <SettingOutlined /> },
           ]}
@@ -55,6 +58,7 @@ export function App() {
         </div>
         <Suspense fallback={Loading}>
           {tab === 'skills' && <SkillsView />}
+          {tab === 'runs' && <RunsView />}
           {tab === 'sessions' && <SessionsView />}
           {tab === 'settings' && <SettingsView />}
         </Suspense>

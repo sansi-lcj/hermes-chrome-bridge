@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.14.0
+
+Deeper Hermes integration (Phase 5 — the final roadmap phase).
+
+### Added
+
+- **Runs dashboard** — a new **Runs** tab lists in-flight Runs API tasks (the
+  ones that keep going in the background after you close the panel) with their
+  model and start time, and a one-click **Stop**. It reflects the persisted run
+  registry and updates live as runs start and finish.
+- **Skills quick-use** — Skills and Toolsets in the Skills tab get a **Use**
+  action that prefills the composer (`Use the "<name>" skill to …`) and jumps to
+  Chat, turning the read-only catalog into a launcher.
+- Tests: the runs store (load ordering, stop, live mirroring) and E2E for the
+  Runs empty state and skill quick-use.
+
 ## 1.13.0
 
 Automation (Phase 4): the agent keeps working in the background.

@@ -2,16 +2,20 @@
 // are terminated when idle; on restart the background reads this registry and
 // reconnects to each Run's event stream instead of silently losing it.
 
-const KEY = 'activeRuns';
+export const RUNS_KEY = 'activeRuns';
+const KEY = RUNS_KEY;
 
 export interface ActiveRun {
   model: string;
   startedAt: number;
 }
 
-function area(): chrome.storage.StorageArea {
+/** Storage area the registry lives in (session, falling back to local). */
+export function runsArea(): chrome.storage.StorageArea {
   return chrome.storage.session ?? chrome.storage.local;
 }
+
+const area = runsArea;
 
 export async function listRuns(): Promise<Record<string, ActiveRun>> {
   const res = await area().get(KEY);

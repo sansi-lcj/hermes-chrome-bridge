@@ -192,3 +192,21 @@ test('scheduled tasks: add a task and see it listed', async ({ page, extensionId
   await expect(page.getByLabel('Edit task Daily digest')).toBeVisible();
   await expect(page.getByText(/every 60 min/)).toBeVisible();
 });
+
+test('runs dashboard shows the empty state', async ({ page, extensionId }) => {
+  await configure(page, extensionId);
+  await page.getByLabel('segmented control').getByText('Runs').click();
+  await expect(page.getByText('Active runs (0)')).toBeVisible();
+  await expect(page.getByText('No runs in flight')).toBeVisible();
+});
+
+test('skills: "use" prefills the composer and jumps to chat', async ({ page, extensionId }) => {
+  await configure(page, extensionId);
+  await page.getByLabel('segmented control').getByText('Skills').click();
+  // The mock server reports a "web_search" skill.
+  await page.getByLabel(/Use skill web_search/).click();
+  // We land on Chat with the composer prefilled to invoke it.
+  await expect(page.getByPlaceholder(/Message the agent/)).toHaveValue(
+    /Use the "web_search" skill to/,
+  );
+});
