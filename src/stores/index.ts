@@ -11,6 +11,7 @@ import {
   loadActiveConversation,
   loadModels,
   useChatStore,
+  type ChatState,
 } from './chat';
 import { useCatalogStore } from './catalog';
 import { activeProfile, useProfilesStore } from './profiles';
@@ -104,7 +105,7 @@ export function initStores(): void {
     if (chat.conversationId !== null) return; // only seed a fresh draft
     const prof = activeProfile();
     if (!prof) return;
-    const patch: Record<string, unknown> = {};
+    const patch: Partial<ChatState> = {};
     if (prof.system && !chat.system) patch.system = prof.system;
     if (prof.autoPageContext && !chat.attachContext) patch.attachContext = true;
     if (prof.private && !chat.onDevice) patch.onDevice = true;

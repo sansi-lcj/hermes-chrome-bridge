@@ -4,6 +4,7 @@ import {
   newTaskId,
   normalizeInterval,
   saveTasks,
+  TASKS_KEY,
   type ScheduledTask,
 } from '../lib/tasks';
 
@@ -51,8 +52,8 @@ export const useTasksStore = create<TasksState>((set, get) => ({
 export function watchTasks(): void {
   if (typeof chrome === 'undefined' || !chrome.storage?.onChanged) return;
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && changes.scheduledTasks) {
-      const next = changes.scheduledTasks.newValue as ScheduledTask[] | undefined;
+    if (area === 'local' && changes[TASKS_KEY]) {
+      const next = changes[TASKS_KEY].newValue as ScheduledTask[] | undefined;
       if (Array.isArray(next)) useTasksStore.setState({ tasks: next });
     }
   });

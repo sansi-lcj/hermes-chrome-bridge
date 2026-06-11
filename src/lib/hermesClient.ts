@@ -252,13 +252,13 @@ export class HermesClient {
     }
   }
 
+  /**
+   * Request cancellation of a Run. Throws a typed error on failure so callers
+   * that care (the Runs dashboard) can surface it; the abort path that cancels
+   * on stream teardown swallows the error itself.
+   */
   async stopRun(runId: string): Promise<void> {
-    await fetch(`${this.baseUrl}/v1/runs/${encodeURIComponent(runId)}/stop`, {
-      method: 'POST',
-      headers: this.headers(),
-    }).catch(() => {
-      /* best-effort cancel */
-    });
+    await this.fetchOk(`/v1/runs/${encodeURIComponent(runId)}/stop`, { method: 'POST' });
   }
 }
 

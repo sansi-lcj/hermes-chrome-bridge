@@ -90,7 +90,7 @@ export function QuickCommands() {
             <span>Body</span>
             <Input.TextArea
               value={draft.body}
-              placeholder="Summarize this page:\n\n{{page}}"
+              placeholder={'Summarize this page:\n\n{{page}}'}
               autoSize={{ minRows: 3, maxRows: 10 }}
               onChange={(e) => setDraft({ ...draft, body: e.target.value })}
             />

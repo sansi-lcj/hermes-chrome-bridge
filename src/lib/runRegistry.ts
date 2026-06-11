@@ -10,12 +10,11 @@ export interface ActiveRun {
   startedAt: number;
 }
 
-/** Storage area the registry lives in (session, falling back to local). */
-export function runsArea(): chrome.storage.StorageArea {
+// session storage clears when the browser closes (and is limited to trusted
+// contexts), which is what we want for transient in-flight runs.
+function area(): chrome.storage.StorageArea {
   return chrome.storage.session ?? chrome.storage.local;
 }
-
-const area = runsArea;
 
 export async function listRuns(): Promise<Record<string, ActiveRun>> {
   const res = await area().get(KEY);
