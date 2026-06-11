@@ -15,6 +15,7 @@ import {
 import { useCatalogStore } from './catalog';
 import { activeProfile, useProfilesStore } from './profiles';
 import { isConfigured, useSettingsStore } from './settings';
+import { useTasksStore, watchTasks } from './tasks';
 import { useTemplatesStore } from './templates';
 import { useUiStore } from './ui';
 
@@ -23,6 +24,7 @@ export { useCatalogStore } from './catalog';
 export { useProfilesStore, activeProfile } from './profiles';
 export { useSettingsStore } from './settings';
 export { useSettingsFormStore } from './settingsForm';
+export { useTasksStore } from './tasks';
 export { useTemplatesStore } from './templates';
 export { useUiStore } from './ui';
 export type { Tab } from './ui';
@@ -112,9 +114,11 @@ export function initStores(): void {
 
   initChat();
   initActiveTabTracking();
+  watchTasks(); // reflect background-written task results back into the UI
   void useSettingsStore.getState().load();
   void useTemplatesStore.getState().load();
   void useProfilesStore.getState().load();
+  void useTasksStore.getState().load();
 }
 
 /** Track the active tab's URL so site profiles can match it. */

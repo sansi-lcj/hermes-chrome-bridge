@@ -181,3 +181,14 @@ test('site profiles: add a profile and see it listed', async ({ page, extensionI
   await expect(page.getByLabel('Edit profile Paper reader')).toBeVisible();
   await expect(page.getByText(/arxiv\.org · on-device/)).toBeVisible();
 });
+
+test('scheduled tasks: add a task and see it listed', async ({ page, extensionId }) => {
+  await configure(page, extensionId);
+  await page.getByRole('button', { name: /Add task/ }).click();
+  await page.getByPlaceholder('Morning AI-news digest').fill('Daily digest');
+  await page.getByPlaceholder(/Summarize the latest/).fill('Summarize today in 3 bullets.');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+
+  await expect(page.getByLabel('Edit task Daily digest')).toBeVisible();
+  await expect(page.getByText(/every 60 min/)).toBeVisible();
+});

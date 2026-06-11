@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.13.0
+
+Automation (Phase 4): the agent keeps working in the background.
+
+### Added
+
+- **Scheduled tasks** — save a prompt + interval and the background runs it on a
+  `chrome.alarms` schedule using the active account, then raises a desktop
+  notification with the result (a morning digest, a periodic check). Managed in
+  Settings; toggle on/off, see the last-run time. Alarms are reconciled from the
+  registry on every worker startup and whenever tasks change.
+- **Tab management tools** — `group_tabs` (group tabs by id into a titled group)
+  and `close_tabs` (close tabs by id), both confirmation-gated. Combined with
+  `list_tabs`/`read_tab`, the agent can tidy or triage your tabs.
+- Permissions: `tabGroups` and `alarms`.
+- Tests: alarm-name encode/decode, interval clamping, task registry
+  round-trip/patch, the tab tools, and an E2E for the task manager.
+
 ## 1.12.0
 
 Site intelligence (Phase 3): the assistant adapts to where you're browsing.

@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const create = vi.fn(async () => ({}));
 const sendMessage = vi.fn(async () => [{ index: 0, tag: 'button', name: 'Save' }]);
+const group = vi.fn(async () => 99);
+const remove = vi.fn(async () => {});
+const groupsUpdate = vi.fn(async () => {});
 vi.stubGlobal('chrome', {
   tabs: {
     query: vi.fn(async () => [
@@ -9,7 +12,10 @@ vi.stubGlobal('chrome', {
     ]),
     create,
     sendMessage,
+    group,
+    remove,
   },
+  tabGroups: { update: groupsUpdate },
 });
 
 const { toolSpecs, runTool, TOOLS, needsConfirmation, createGuardedRunner } =
@@ -62,6 +68,26 @@ describe('tools', () => {
     expect(create).not.toHaveBeenCalled();
   });
 
+  it('group_tabs groups ids and titles the group', async () => {
+    const out = JSON.parse(await runTool('group_tabs', '{"ids":[1,2],"title":"Research"}'));
+    expect(out).toMatchObject({ grouped: [1, 2], groupId: 99, title: 'Research' });
+    expect(group).toHaveBeenCalledWith({ tabIds: [1, 2] });
+    expect(groupsUpdate).toHaveBeenCalledWith(99, { title: 'Research' });
+  });
+
+  it('group_tabs / close_tabs reject an empty id list', async () => {
+    expect(JSON.parse(await runTool('group_tabs', '{"ids":[],"title":"x"}')).error).toMatch(
+      /non-empty/,
+    );
+    expect(JSON.parse(await runTool('close_tabs', '{"ids":[]}')).error).toMatch(/non-empty/);
+  });
+
+  it('close_tabs removes the given ids', async () => {
+    const out = JSON.parse(await runTool('close_tabs', '{"ids":[3,4]}'));
+    expect(out).toEqual({ closed: [3, 4] });
+    expect(remove).toHaveBeenCalledWith([3, 4]);
+  });
+
   it('reports an unknown tool and invalid JSON', async () => {
     expect(JSON.parse(await runTool('nope', '')).error).toMatch(/Unknown tool/);
     expect(JSON.parse(await runTool('open_url', '{bad')).error).toMatch(/not JSON/);
@@ -74,8 +100,11 @@ describe('confirmation gating', () => {
     expect(needsConfirmation('type_text')).toBe(true);
     expect(needsConfirmation('navigate_to')).toBe(true);
     expect(needsConfirmation('open_url')).toBe(true);
+    expect(needsConfirmation('group_tabs')).toBe(true);
+    expect(needsConfirmation('close_tabs')).toBe(true);
     expect(needsConfirmation('get_page_elements')).toBe(false);
     expect(needsConfirmation('list_tabs')).toBe(false);
+    expect(needsConfirmation('read_tab')).toBe(false);
   });
 
   it('auto-approve runs write tools without confirming', async () => {

@@ -184,6 +184,47 @@ export const TOOLS: ToolDef[] = [
       return JSON.stringify({ opened: url });
     },
   },
+  {
+    name: 'group_tabs',
+    description:
+      'Group the given tabs (by id, from list_tabs) into a named tab group for tidy organization.',
+    parameters: {
+      type: 'object',
+      properties: {
+        ids: { type: 'array', items: { type: 'number' }, description: 'Tab ids to group.' },
+        title: { type: 'string', description: 'Group title.' },
+      },
+      required: ['ids', 'title'],
+      additionalProperties: false,
+    },
+    write: true,
+    execute: async (args) => {
+      const ids = Array.isArray(args.ids) ? args.ids.map(Number).filter(Number.isInteger) : [];
+      if (ids.length === 0) throw new Error('ids must be a non-empty array of tab ids.');
+      const groupId = await chrome.tabs.group({ tabIds: ids });
+      await chrome.tabGroups.update(groupId, { title: String(args.title ?? 'Group') });
+      return JSON.stringify({ grouped: ids, groupId, title: args.title });
+    },
+  },
+  {
+    name: 'close_tabs',
+    description: 'Close the given tabs by id (from list_tabs).',
+    parameters: {
+      type: 'object',
+      properties: {
+        ids: { type: 'array', items: { type: 'number' }, description: 'Tab ids to close.' },
+      },
+      required: ['ids'],
+      additionalProperties: false,
+    },
+    write: true,
+    execute: async (args) => {
+      const ids = Array.isArray(args.ids) ? args.ids.map(Number).filter(Number.isInteger) : [];
+      if (ids.length === 0) throw new Error('ids must be a non-empty array of tab ids.');
+      await chrome.tabs.remove(ids);
+      return JSON.stringify({ closed: ids });
+    },
+  },
 ];
 
 const byName = new Map(TOOLS.map((t) => [t.name, t]));

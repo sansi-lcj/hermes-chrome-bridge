@@ -4,6 +4,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useSettingsFormStore, useSettingsStore } from '../../stores';
 import type { ChatMode } from '../../lib/types';
 import { QuickCommands } from './QuickCommands';
+import { ScheduledTasks } from './ScheduledTasks';
 import { SiteProfiles } from './SiteProfiles';
 
 export function SettingsView() {
@@ -98,6 +99,8 @@ export function SettingsView() {
       <QuickCommands />
 
       <SiteProfiles />
+
+      <ScheduledTasks />
     </div>
   );
 }

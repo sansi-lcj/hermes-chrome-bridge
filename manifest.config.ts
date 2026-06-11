@@ -59,8 +59,10 @@ export default defineManifest({
     'activeTab',
     'scripting',
     'tabs',
+    'tabGroups',
     'contextMenus',
     'notifications',
+    'alarms',
   ],
   // The configured Hermes origin is requested at runtime (on Settings save) via
   // chrome.permissions.request so the service worker can call it without CORS.
