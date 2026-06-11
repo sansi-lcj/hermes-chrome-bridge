@@ -10,6 +10,7 @@
 // Templates are stored per-install (shared across accounts) in
 // chrome.storage.local under `promptTemplates`.
 
+import { makeId, saveCollection } from './collection';
 import type { PageContext } from './types';
 
 export interface PromptTemplate {
@@ -24,9 +25,7 @@ export interface PromptTemplate {
 
 const KEY = 'promptTemplates';
 
-export function newTemplateId(): string {
-  return `tpl-${crypto.randomUUID()}`;
-}
+export const newTemplateId = (): string => makeId('tpl');
 
 /** Variables a template can interpolate; missing ones expand to ''. */
 export interface TemplateVars {
@@ -97,17 +96,17 @@ const STARTER_TEMPLATES: PromptTemplate[] = [
 ];
 
 export async function loadTemplates(): Promise<PromptTemplate[]> {
+  // Note: unlike the generic collection loader, this distinguishes "key absent"
+  // (first run → seed starters) from "key present but empty" (user cleared them).
   const res = await chrome.storage.local.get(KEY);
   const stored = res[KEY] as PromptTemplate[] | undefined;
   if (Array.isArray(stored)) return stored;
-  // First run: seed with a few useful starters.
-  await chrome.storage.local.set({ [KEY]: STARTER_TEMPLATES });
+  await saveTemplates(STARTER_TEMPLATES);
   return STARTER_TEMPLATES;
 }
 
-export async function saveTemplates(templates: PromptTemplate[]): Promise<void> {
-  await chrome.storage.local.set({ [KEY]: templates });
-}
+export const saveTemplates = (templates: PromptTemplate[]): Promise<void> =>
+  saveCollection(KEY, templates);
 
 /** Find templates whose name starts with the (slash-stripped) query. */
 export function matchTemplates(templates: PromptTemplate[], query: string): PromptTemplate[] {

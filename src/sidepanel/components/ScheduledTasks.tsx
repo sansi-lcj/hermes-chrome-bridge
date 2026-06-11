@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Button, Empty, Input, InputNumber, Popconfirm, Space, Switch, Typography } from 'antd';
-import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
+import { Button, Empty, Input, InputNumber, Space, Switch, Typography } from 'antd';
+import { PlusOutlined } from '@ant-design/icons';
 import { useShallow } from 'zustand/react/shallow';
 import { useTasksStore } from '../../stores';
 import { MIN_INTERVAL_MINUTES, type ScheduledTask } from '../../lib/tasks';
+import { EntityCard } from './EntityCard';
 
 interface Draft {
   id: string | null;
@@ -131,43 +132,26 @@ function TaskCard({
   onDelete: () => void;
 }) {
   return (
-    <div className="account-card">
-      <div className="account-main">
-        <div className="account-name">{task.name}</div>
-        <div className="account-sub">
+    <EntityCard
+      noun={`task ${task.name}`}
+      deleteTitle="Delete this task?"
+      title={task.name}
+      subtitle={
+        <>
           every {task.intervalMinutes} min
           {task.lastRunAt ? ` · last ran ${new Date(task.lastRunAt).toLocaleTimeString()}` : ''}
-        </div>
-      </div>
-      <Space onClick={(e) => e.stopPropagation()}>
+        </>
+      }
+      onEdit={onEdit}
+      onDelete={onDelete}
+      extra={
         <Switch
           size="small"
           checked={task.enabled}
           onChange={onToggle}
           aria-label={`Enable task ${task.name}`}
         />
-        <Button
-          size="small"
-          type="text"
-          icon={<EditOutlined />}
-          aria-label={`Edit task ${task.name}`}
-          onClick={onEdit}
-        />
-        <Popconfirm
-          title="Delete this task?"
-          okText="Delete"
-          okButtonProps={{ danger: true }}
-          onConfirm={onDelete}
-        >
-          <Button
-            size="small"
-            type="text"
-            danger
-            icon={<DeleteOutlined />}
-            aria-label={`Delete task ${task.name}`}
-          />
-        </Popconfirm>
-      </Space>
-    </div>
+      }
+    />
   );
 }
