@@ -22,7 +22,8 @@ The UI is built on **[Ant Design X](https://x.ant.design/)** — Ant Design's co
 - **Screenshot Q&A** — attach a screenshot of the current page to your message (sent as an image to vision-capable models).
 - **Quote-reply** — select text on any page → right-click **"Quote … in Hermes chat"** to append it as a Markdown quote to the current composer.
 - **Site profiles** — per-domain defaults (system prompt, auto page-context); new chats on a matching host are seeded automatically. Mark a host **Private** to route it to on-device inference (no network). Managed in Settings; a header tag shows the active profile.
-- **Skills & Sessions** — browse `/v1/skills`, `/v1/toolsets`, and `/api/sessions`.
+- **Skills & Sessions** — browse `/v1/skills`, `/v1/toolsets`, and `/api/sessions`; **use** a skill/toolset with one click (prefills the composer and jumps to Chat).
+- **Runs dashboard** — a **Runs** tab lists long tasks still in flight (they keep running in the background) with one-click **Stop**; updates live as runs start and finish.
 - **Multiple accounts** — manage several Hermes accounts (each its own base URL / API key / model), switch the active one from the header, with **per-account chat history**.
 - **Settings** — manage accounts; one-click connection test.
 

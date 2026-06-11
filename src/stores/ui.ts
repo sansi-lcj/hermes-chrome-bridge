@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 
-export type Tab = 'chat' | 'skills' | 'sessions' | 'settings';
+export type Tab = 'chat' | 'skills' | 'runs' | 'sessions' | 'settings';
 
 interface UiState {
   tab: Tab;

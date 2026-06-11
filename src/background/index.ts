@@ -496,8 +496,21 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       .catch((err) => sendResponse({ ok: false, error: errorMessage(err) }));
     return true;
   }
+  if (message?.type === 'stopRun' && typeof message.runId === 'string') {
+    stopRunById(message.runId)
+      .then(() => sendResponse({ ok: true, data: null }))
+      .catch((err) => sendResponse({ ok: false, error: errorMessage(err) }));
+    return true;
+  }
   return false;
 });
+
+/** Stop a Run by id (from the dashboard) and drop it from the registry. */
+async function stopRunById(runId: string): Promise<void> {
+  const hermes = await client();
+  await hermes.stopRun(runId);
+  await removeRun(runId);
+}
 
 /** Capture the active tab as a PNG data URL (for screenshot Q&A). */
 async function captureVisibleTab(): Promise<string> {

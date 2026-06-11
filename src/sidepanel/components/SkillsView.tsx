@@ -1,6 +1,7 @@
-import { Alert, Card, Empty, List, Spin, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Empty, List, Spin, Tag, Tooltip, Typography } from 'antd';
+import { PlayCircleOutlined } from '@ant-design/icons';
 import { useShallow } from 'zustand/react/shallow';
-import { useCatalogStore } from '../../stores';
+import { useChatStore, useCatalogStore, useUiStore } from '../../stores';
 
 export function SkillsView() {
   const c = useCatalogStore(
@@ -11,6 +12,14 @@ export function SkillsView() {
       skillsError: s.skillsError,
     })),
   );
+  const setInput = useChatStore((s) => s.setInput);
+  const setTab = useUiStore((s) => s.setTab);
+
+  /** Prefill the composer to invoke a skill, then jump to Chat to complete it. */
+  const use = (name: string) => {
+    setInput(`Use the "${name}" skill to `);
+    setTab('chat');
+  };
 
   if (c.skillsLoading)
     return (
@@ -33,7 +42,19 @@ export function SkillsView() {
           size="small"
           dataSource={c.skills}
           renderItem={(s) => (
-            <List.Item>
+            <List.Item
+              actions={[
+                <Tooltip title="Use in chat" key="use">
+                  <Button
+                    size="small"
+                    type="text"
+                    icon={<PlayCircleOutlined />}
+                    aria-label={`Use skill ${s.name}`}
+                    onClick={() => use(s.name)}
+                  />
+                </Tooltip>,
+              ]}
+            >
               <List.Item.Meta title={s.name} description={s.description} />
             </List.Item>
           )}
@@ -47,7 +68,23 @@ export function SkillsView() {
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No toolsets reported" />
       ) : (
         c.toolsets.map((t, i) => (
-          <Card key={t.id ?? i} size="small" title={t.name} style={{ marginBottom: 8 }}>
+          <Card
+            key={t.id ?? i}
+            size="small"
+            title={t.name}
+            style={{ marginBottom: 8 }}
+            extra={
+              <Tooltip title="Use in chat">
+                <Button
+                  size="small"
+                  type="text"
+                  icon={<PlayCircleOutlined />}
+                  aria-label={`Use toolset ${t.name}`}
+                  onClick={() => use(t.name)}
+                />
+              </Tooltip>
+            }
+          >
             {t.description && (
               <Typography.Paragraph type="secondary">{t.description}</Typography.Paragraph>
             )}
