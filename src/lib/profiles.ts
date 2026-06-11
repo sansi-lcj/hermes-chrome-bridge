@@ -5,6 +5,8 @@
 //
 // Stored per-install (shared across accounts) under `siteProfiles`.
 
+import { loadCollection, makeId, saveCollection } from './collection';
+
 export interface SiteProfile {
   id: string;
   /**
@@ -24,9 +26,7 @@ export interface SiteProfile {
 
 const KEY = 'siteProfiles';
 
-export function newProfileId(): string {
-  return `sp-${crypto.randomUUID()}`;
-}
+export const newProfileId = (): string => makeId('sp');
 
 /** Extract the lowercase host from a URL, or '' if it isn't a web URL. */
 export function hostOf(url: string): string {
@@ -65,12 +65,7 @@ export function matchProfile(profiles: SiteProfile[], url: string): SiteProfile 
   return best;
 }
 
-export async function loadProfiles(): Promise<SiteProfile[]> {
-  const res = await chrome.storage.local.get(KEY);
-  const stored = res[KEY] as SiteProfile[] | undefined;
-  return Array.isArray(stored) ? stored : [];
-}
+export const loadProfiles = (): Promise<SiteProfile[]> => loadCollection<SiteProfile>(KEY);
 
-export async function saveProfiles(profiles: SiteProfile[]): Promise<void> {
-  await chrome.storage.local.set({ [KEY]: profiles });
-}
+export const saveProfiles = (profiles: SiteProfile[]): Promise<void> =>
+  saveCollection(KEY, profiles);
