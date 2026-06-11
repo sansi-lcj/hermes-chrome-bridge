@@ -166,3 +166,18 @@ test('conversation search filters the drawer to matches', async ({ page, extensi
 // Note: screenshot capture (chrome.tabs.captureVisibleTab) is exercised by unit
 // tests around the chat store's multimodal payload; it can't run in the headless
 // harness because the panel page isn't a capturable web tab.
+
+test('site profiles: add a profile and see it listed', async ({ page, extensionId }) => {
+  await configure(page, extensionId);
+  // Settings tab is already showing after configure.
+  await page.getByRole('button', { name: /Add profile/ }).click();
+  await page.getByPlaceholder('github.com').fill('arxiv.org');
+  await page.getByPlaceholder('Code review assistant').fill('Paper reader');
+  await page.getByPlaceholder(/meticulous code reviewer/).fill('You explain papers simply.');
+  await page.getByLabel('Private — route to on-device inference (no network)').check();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+
+  // The new profile card appears with its host + on-device marker.
+  await expect(page.getByLabel('Edit profile Paper reader')).toBeVisible();
+  await expect(page.getByText(/arxiv\.org · on-device/)).toBeVisible();
+});

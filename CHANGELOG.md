@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.12.0
+
+Site intelligence (Phase 3): the assistant adapts to where you're browsing.
+
+### Added
+
+- **Site profiles** — per-host defaults (`github.com`, `*.arxiv.org`, …) with a
+  system prompt and an auto page-context option. When the active tab matches, a
+  **fresh/draft** chat is seeded automatically (an in-progress conversation is
+  never altered), and a header tag shows the active profile. Managed in
+  Settings.
+- **Privacy routing** — mark a host **Private** to pin its chats to **on-device**
+  inference (no network) where the browser supports it.
+- Tests: host extraction, exact/`*.`-wildcard matching, most-specific-wins
+  profile selection, persistence, and an E2E for the profile manager.
+
+### Notes
+
+- The active tab URL is tracked from the panel (tabs `onActivated`/`onUpdated`,
+  window focus) purely to match a profile; nothing about the page leaves the
+  device unless you attach page context or send a message.
+
 ## 1.11.0
 
 Browser-native reading (Phase 2 of the roadmap): the things a side-panel agent

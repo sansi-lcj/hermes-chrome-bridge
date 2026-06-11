@@ -20,6 +20,7 @@ The UI is built on **[Ant Design X](https://x.ant.design/)** — Ant Design's co
 - **Agent tools** — toggle **Tools** to let the agent operate your browser via function calling: **perceive** the page (`get_page_elements`, `read_active_page`, `list_tabs`), **read across tabs** (`read_tab` — synthesize several open tabs at once), and **act** on it (`click_element`, `type_text`, `scroll_page`, `navigate_to`, `open_url`). Each tool step shows in the tool trail. Write/action tools prompt for **Allow/Deny** by default (an **Auto-run** toggle skips prompts). Uses already-granted permissions only.
 - **Screenshot Q&A** — attach a screenshot of the current page to your message (sent as an image to vision-capable models).
 - **Quote-reply** — select text on any page → right-click **"Quote … in Hermes chat"** to append it as a Markdown quote to the current composer.
+- **Site profiles** — per-domain defaults (system prompt, auto page-context); new chats on a matching host are seeded automatically. Mark a host **Private** to route it to on-device inference (no network). Managed in Settings; a header tag shows the active profile.
 - **Skills & Sessions** — browse `/v1/skills`, `/v1/toolsets`, and `/api/sessions`.
 - **Multiple accounts** — manage several Hermes accounts (each its own base URL / API key / model), switch the active one from the header, with **per-account chat history**.
 - **Settings** — manage accounts; one-click connection test.
