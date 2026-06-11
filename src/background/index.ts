@@ -13,6 +13,14 @@ import { HermesClient } from '../lib/hermesClient';
 import { setPendingNewChat, setPendingPrompt } from '../lib/pending';
 import { addRun, listRuns, removeRun } from '../lib/runRegistry';
 import { getSettings } from '../lib/storage';
+import {
+  isTasksKey,
+  loadTasks,
+  normalizeInterval,
+  patchTask,
+  taskAlarmName,
+  taskIdFromAlarm,
+} from '../lib/tasks';
 import { createGuardedRunner, runTool, toolSpecs } from '../lib/tools';
 import type {
   ApiRequest,
@@ -395,6 +403,75 @@ async function resumeRun(hermes: HermesClient, runId: string): Promise<void> {
 
 // Runs once per worker startup (a fresh instance has no in-memory streams).
 void resumeOrphanedRuns();
+
+// ---------------------------------------------------------------------------
+// Scheduled tasks (digests / monitoring) backed by chrome.alarms
+// ---------------------------------------------------------------------------
+
+const NOTIFY_RESULT_CHARS = 250;
+
+/** Reconcile chrome.alarms with the persisted task registry. */
+async function syncTaskAlarms(): Promise<void> {
+  const tasks = await loadTasks();
+  const wanted = new Set(tasks.filter((t) => t.enabled).map((t) => t.id));
+  const existing = await chrome.alarms.getAll();
+  for (const a of existing) {
+    const id = taskIdFromAlarm(a.name);
+    if (id && !wanted.has(id)) await chrome.alarms.clear(a.name);
+  }
+  for (const t of tasks) {
+    if (!t.enabled) continue;
+    const minutes = normalizeInterval(t.intervalMinutes);
+    chrome.alarms.create(taskAlarmName(t.id), {
+      periodInMinutes: minutes,
+      delayInMinutes: minutes,
+    });
+  }
+}
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  const id = taskIdFromAlarm(alarm.name);
+  if (id) void runScheduledTask(id);
+});
+
+// Re-sync alarms whenever the task registry changes (e.g. edited in the panel).
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && Object.keys(changes).some(isTasksKey)) void syncTaskAlarms();
+});
+
+async function runScheduledTask(id: string): Promise<void> {
+  const task = (await loadTasks()).find((t) => t.id === id);
+  if (!task || !task.enabled) return;
+  try {
+    const hermes = await client();
+    const settings = await getSettings();
+    const res = await hermes.chatCompletion(
+      [{ role: 'user', content: task.prompt }],
+      settings.defaultModel,
+      undefined,
+      new AbortController().signal,
+    );
+    const answer = (res.choices?.[0]?.message?.content ?? '').toString();
+    await patchTask(id, { lastRunAt: Date.now(), lastResult: answer.slice(0, 2000) });
+    notifyTaskDone(task.name, answer);
+  } catch (err) {
+    await patchTask(id, { lastRunAt: Date.now(), lastResult: `⚠️ ${errorMessage(err)}` });
+  }
+}
+
+function notifyTaskDone(name: string, answer: string): void {
+  const snippet = answer.trim().slice(0, NOTIFY_RESULT_CHARS) || 'Task finished.';
+  chrome.notifications.create({
+    type: 'basic',
+    iconUrl: chrome.runtime.getURL('icons/icon-128.png'),
+    title: `Hermes: ${name}`,
+    message: snippet,
+    priority: 1,
+  });
+}
+
+// Reconcile alarms on every worker startup.
+void syncTaskAlarms();
 
 // ---------------------------------------------------------------------------
 // One-off discovery + page-context requests
